@@ -2,517 +2,477 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>CleanOps — Housekeeping Supervisor</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
-    --bg: #0e0f11;
-    --surface: #16181c;
-    --surface2: #1e2028;
-    --border: #2a2d36;
-    --text: #f0f0f0;
-    --muted: #8a8fa8;
-    --accent: #00e5a0;
-    --accent-dim: rgba(0,229,160,0.12);
-    --yellow: #f5c842;
-    --yellow-dim: rgba(245,200,66,0.12);
-    --red: #ff4f6a;
-    --red-dim: rgba(255,79,106,0.12);
-    --blue: #4fa3ff;
-    --blue-dim: rgba(79,163,255,0.12);
-    --radius: 14px;
-    --radius-sm: 8px;
+    --bg: #0a0c10;
+    --surface: #121620;
+    --surface2: #1a1f2e;
+    --border: #252d40;
+    --text: #eef0f6;
+    --muted: #7a85a8;
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-dim: rgba(59,130,246,0.14);
+    --yellow: #f59e0b;
+    --yellow-dim: rgba(245,158,11,0.14);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.14);
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.14);
+    --purple: #a855f7;
+    --purple-dim: rgba(168,85,247,0.14);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --radius-xs: 6px;
     --font-head: 'Syne', sans-serif;
     --font-mono: 'Space Mono', monospace;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  html { font-size: 15px; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--font-head);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ---- SCROLLBAR ---- */
-  ::-webkit-scrollbar { width: 4px; }
+  html { font-size: 15px; -webkit-text-size-adjust: 100%; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-head); min-height: 100vh; overflow-x: hidden; }
+  ::-webkit-scrollbar { width: 3px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-  /* ---- VIEWS ---- */
-  .view { display: none; min-height: 100vh; padding-bottom: 80px; }
+  /* VIEWS */
+  .view { display: none; min-height: 100vh; padding-bottom: 90px; }
   .view.active { display: block; }
 
-  /* ---- TOP NAV ---- */
+  /* TOPBAR */
   .topbar {
     position: sticky; top: 0; z-index: 100;
-    background: rgba(14,15,17,0.92);
-    backdrop-filter: blur(12px);
+    background: rgba(10,12,16,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
-    padding: 14px 18px;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px;
+    padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
-  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
   .back-btn {
-    background: var(--surface2); border: none; color: var(--text);
-    width: 36px; height: 36px; border-radius: var(--radius-sm);
-    font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-    transition: background .2s;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    width: 38px; height: 38px; border-radius: var(--radius-sm);
+    font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all .2s; flex-shrink: 0;
   }
-  .back-btn:hover { background: var(--border); }
-  .topbar-title {
-    font-family: var(--font-head); font-weight: 700; font-size: 1.05rem;
-    line-height: 1.2;
-  }
-  .topbar-sub { font-size: 0.72rem; color: var(--muted); font-family: var(--font-mono); }
+  .back-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+  .topbar-brand { font-weight: 800; font-size: 1.25rem; color: var(--accent); letter-spacing: -0.5px; }
+  .topbar-title { font-weight: 700; font-size: 0.97rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-sub { font-size: 0.67rem; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
   .logout-btn {
-    background: var(--red-dim); border: 1px solid var(--red);
-    color: var(--red); padding: 7px 14px; border-radius: var(--radius-sm);
-    font-family: var(--font-mono); font-size: 0.7rem; cursor: pointer;
-    transition: background .2s;
+    background: var(--red-dim); border: 1px solid var(--red); color: var(--red);
+    padding: 7px 11px; border-radius: var(--radius-xs); font-family: var(--font-mono);
+    font-size: 0.63rem; cursor: pointer; font-weight: 700; transition: background .2s;
   }
-  .logout-btn:hover { background: rgba(255,79,106,0.22); }
+  .logout-btn:hover { background: rgba(239,68,68,0.22); }
 
-  /* ---- LOGIN ---- */
+  /* LOGIN */
   #view-login {
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    min-height: 100vh; padding: 30px 24px;
-    background: radial-gradient(ellipse at 50% 0%, rgba(0,229,160,0.07) 0%, transparent 70%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px 18px;
+    background: radial-gradient(ellipse at 30% 20%, rgba(59,130,246,0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.07) 0%, transparent 50%);
   }
-  .login-logo {
-    font-family: var(--font-head); font-weight: 800; font-size: 2.2rem;
-    letter-spacing: -1px; color: var(--accent); margin-bottom: 4px;
+  .login-logo { font-weight: 800; font-size: 2.4rem; letter-spacing: -1.5px; color: var(--accent); margin-bottom: 4px; text-shadow: 0 0 40px rgba(59,130,246,0.4); }
+  .login-tagline { color: var(--muted); font-family: var(--font-mono); font-size: 0.68rem; margin-bottom: 36px; text-align: center; }
+  .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 20px; width: 100%; max-width: 400px; box-shadow: var(--shadow); }
+  .login-card h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; }
+
+  /* FORM */
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 0.67rem; color: var(--muted); font-family: var(--font-mono); margin-bottom: 5px; letter-spacing: 0.05em; }
+  .field input, .field select, .field textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 13px; border-radius: var(--radius-sm); font-family: var(--font-head); font-size: 0.9rem;
+    transition: border-color .2s, box-shadow .2s; outline: none; -webkit-appearance: none;
   }
-  .login-tagline { color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; margin-bottom: 40px; }
-  .login-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 28px 22px; width: 100%; max-width: 380px;
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+  .field textarea { resize: vertical; min-height: 76px; }
+  .field select { cursor: pointer; }
+  .field select option { background: #1a1f2e; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 12px 18px; border-radius: var(--radius-sm); font-family: var(--font-mono);
+    font-size: 0.76rem; font-weight: 700; cursor: pointer; border: none;
+    transition: all .18s; letter-spacing: 0.04em; text-transform: uppercase;
+    -webkit-tap-highlight-color: transparent;
   }
-  .login-card h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 22px; }
-  .error-msg {
-    background: var(--red-dim); border: 1px solid var(--red);
-    color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm);
-    font-size: 0.8rem; margin-bottom: 16px; display: none;
-    font-family: var(--font-mono);
-  }
+  .btn:active { transform: scale(0.96); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+  .btn-primary { background: var(--accent); color: #fff; width: 100%; }
+  .btn-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 4px 16px rgba(59,130,246,0.35); }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); width: 100%; }
+  .btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .btn-danger { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); width: 100%; }
+  .btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.22); }
+  .btn-yellow { background: var(--yellow-dim); border: 1px solid var(--yellow); color: var(--yellow); }
+  .btn-green { background: var(--green-dim); border: 1px solid var(--green); color: var(--green); }
+  .btn-blue { background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent); }
+  .btn-purple { background: var(--purple-dim); border: 1px solid var(--purple); color: var(--purple); }
+  .btn-sm { padding: 7px 12px; font-size: 0.65rem; width: auto; border-radius: var(--radius-xs); }
+
+  /* ERROR */
+  .error-msg { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); padding: 9px 13px; border-radius: var(--radius-xs); font-size: 0.76rem; margin-bottom: 14px; display: none; font-family: var(--font-mono); }
   .error-msg.show { display: block; }
 
-  /* ---- FORM ELEMENTS ---- */
-  .field { margin-bottom: 16px; }
-  .field label { display: block; font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); margin-bottom: 6px; }
-  .field input, .field select, .field textarea {
-    width: 100%; background: var(--bg); border: 1px solid var(--border);
-    color: var(--text); padding: 12px 14px; border-radius: var(--radius-sm);
-    font-family: var(--font-head); font-size: 0.9rem;
-    transition: border-color .2s; outline: none; appearance: none;
-  }
-  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
-  .field textarea { resize: vertical; min-height: 80px; }
-  .field select option { background: var(--surface); }
+  /* CONTENT */
+  .content { padding: 16px; max-width: 800px; margin: 0 auto; }
 
-  /* ---- BUTTONS ---- */
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 12px 20px; border-radius: var(--radius-sm); font-family: var(--font-mono);
-    font-size: 0.8rem; font-weight: 700; cursor: pointer; border: none;
-    transition: opacity .2s, transform .1s; letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-primary { background: var(--accent); color: #000; width: 100%; }
-  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
-  .btn-outline {
-    background: transparent; border: 1px solid var(--border);
-    color: var(--text); width: 100%;
-  }
-  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-  .btn-danger { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); width: 100%; }
-  .btn-yellow { background: var(--yellow-dim); border: 1px solid var(--yellow); color: var(--yellow); }
-  .btn-green { background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent); }
-  .btn-sm { padding: 7px 13px; font-size: 0.68rem; width: auto; }
-
-  /* ---- CONTENT AREA ---- */
-  .content { padding: 18px; }
-
-  /* ---- CARDS ---- */
+  /* CARDS */
   .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
-    cursor: pointer; transition: border-color .2s, transform .15s;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 15px; margin-bottom: 10px; cursor: pointer;
+    transition: border-color .2s, transform .15s, box-shadow .2s;
     position: relative; overflow: hidden;
   }
-  .card:hover { border-color: var(--accent); transform: translateY(-1px); }
-  .card::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-    width: 3px; background: var(--accent);
-    border-radius: 3px 0 0 3px;
-  }
+  .card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(59,130,246,0.12); }
+  .card:active { transform: scale(0.99); }
+  .card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); border-radius: 3px 0 0 3px; }
   .card.yellow::before { background: var(--yellow); }
   .card.red::before { background: var(--red); }
+  .card.green::before { background: var(--green); }
   .card.grey::before { background: var(--muted); }
-  .card-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
-  .card-meta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+  .card-title { font-weight: 700; font-size: 0.93rem; margin-bottom: 4px; }
+  .card-meta { font-family: var(--font-mono); font-size: 0.67rem; color: var(--muted); line-height: 1.7; }
 
-  /* ---- STATUS BADGES ---- */
-  .badge {
-    display: inline-block; padding: 3px 10px; border-radius: 20px;
-    font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700;
-    letter-spacing: 0.05em; text-transform: uppercase;
-  }
-  .badge-green { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-family: var(--font-mono); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .badge-blue { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
   .badge-yellow { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
   .badge-red { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
-  .badge-muted { background: rgba(138,143,168,0.1); color: var(--muted); border: 1px solid var(--border); }
-  .badge-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+  .badge-green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+  .badge-muted { background: rgba(122,133,168,0.1); color: var(--muted); border: 1px solid var(--border); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); border: 1px solid var(--purple); }
 
-  /* ---- SECTION HEADER ---- */
-  .section-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px;
-  }
-  .section-title { font-weight: 800; font-size: 1.1rem; }
-  .section-count { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+  /* SECTION */
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
+  .section-title { font-weight: 800; font-size: 1rem; }
+  .section-count { font-family: var(--font-mono); font-size: 0.67rem; color: var(--muted); }
 
-  /* ---- BOTTOM FAB ---- */
+  /* FAB */
   .fab-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
-    background: rgba(14,15,17,0.97); border-top: 1px solid var(--border);
-    padding: 12px 18px; display: flex; gap: 10px; z-index: 99;
+    background: rgba(10,12,16,0.97); border-top: 1px solid var(--border);
+    padding: 10px 16px; display: flex; gap: 8px; z-index: 99;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
   .fab-bar .btn { flex: 1; }
 
-  /* ---- EMPTY STATE ---- */
-  .empty {
-    text-align: center; padding: 50px 20px; color: var(--muted);
-    font-family: var(--font-mono); font-size: 0.8rem;
-  }
-  .empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.4; }
+  /* EMPTY */
+  .empty { text-align: center; padding: 44px 20px; color: var(--muted); font-family: var(--font-mono); font-size: 0.76rem; }
+  .empty-icon { font-size: 2.2rem; margin-bottom: 10px; opacity: 0.45; }
 
-  /* ---- MODAL ---- */
-  .modal-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.7); z-index: 200;
-    align-items: flex-end; justify-content: center;
-  }
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200; align-items: flex-end; justify-content: center; }
   .modal-overlay.open { display: flex; }
   .modal {
-    background: var(--surface); border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--accent);
     border-radius: var(--radius) var(--radius) 0 0;
-    padding: 24px 20px; width: 100%; max-width: 520px;
-    max-height: 88vh; overflow-y: auto;
-    animation: slideUp .25s ease;
+    padding: 22px 18px; width: 100%; max-width: 540px;
+    max-height: 90vh; overflow-y: auto; animation: slideUp .22s ease;
+    padding-bottom: max(22px, env(safe-area-inset-bottom));
   }
-  @keyframes slideUp {
-    from { transform: translateY(60px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-  .modal-title {
-    font-weight: 800; font-size: 1.1rem; margin-bottom: 20px;
-    padding-bottom: 14px; border-bottom: 1px solid var(--border);
-  }
-  .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+  .modal-title { font-weight: 800; font-size: 1.05rem; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 14px; }
   .modal-actions .btn { flex: 1; }
 
-  /* ---- TABS ---- */
-  .tabs { display: flex; gap: 4px; background: var(--surface2); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 18px; }
-  .tab {
-    flex: 1; padding: 9px 6px; text-align: center; border-radius: 6px;
-    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700;
-    text-transform: uppercase; cursor: pointer; color: var(--muted);
-    transition: all .2s; letter-spacing: 0.04em;
-  }
-  .tab.active { background: var(--accent); color: #000; }
+  /* TABS */
+  .tabs { display: flex; gap: 3px; background: var(--surface2); border-radius: var(--radius-sm); padding: 3px; margin-bottom: 16px; border: 1px solid var(--border); }
+  .tab { flex: 1; padding: 8px 6px; text-align: center; border-radius: 7px; font-family: var(--font-mono); font-size: 0.63rem; font-weight: 700; text-transform: uppercase; cursor: pointer; color: var(--muted); transition: all .2s; letter-spacing: 0.04em; -webkit-tap-highlight-color: transparent; }
+  .tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
 
-  /* ---- TASK CARD ---- */
-  .task-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
-  }
-  .task-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  /* TASK CARD */
+  .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; transition: border-color .2s; }
+  .task-card.s-in_progress { border-left: 3px solid var(--yellow); }
+  .task-card.s-completed { border-left: 3px solid var(--green); opacity: 0.72; }
+  .task-card.s-delayed { border-left: 3px solid var(--red); }
+  .task-card.s-not_started { border-left: 3px solid var(--border); }
+  .task-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 8px; }
   .task-name { font-weight: 700; font-size: 0.9rem; line-height: 1.3; }
-  .task-worker { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
-  .task-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  .task-actions { display: flex; gap: 8px; }
-  .task-actions .btn { flex: 1; }
+  .task-worker { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+  .task-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; }
+  .task-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+  .task-actions .btn { flex: 1; min-width: 100px; }
 
-  /* ---- STAT ROW ---- */
-  .stat-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px; margin-bottom: 18px;
-  }
-  .stat-box {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
-  }
-  .stat-num { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 700; line-height: 1; }
-  .stat-label { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+  /* STATS */
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  @media (max-width: 340px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 8px; text-align: center; }
+  .stat-num { font-family: var(--font-mono); font-size: 1.3rem; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 0.58rem; color: var(--muted); margin-top: 3px; font-family: var(--font-mono); }
 
-  /* ---- LOADER ---- */
-  .loader {
-    text-align: center; padding: 40px; color: var(--muted);
-    font-family: var(--font-mono); font-size: 0.75rem;
-  }
-  .spinner {
-    width: 28px; height: 28px; border: 3px solid var(--border);
-    border-top-color: var(--accent); border-radius: 50%;
-    animation: spin .7s linear infinite; margin: 0 auto 12px;
-  }
+  /* LOADER */
+  .loader { text-align: center; padding: 36px; color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; }
+  .spinner { width: 26px; height: 26px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .65s linear infinite; margin: 0 auto 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ---- ISSUE CARD ---- */
-  .issue-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
-  }
-  .issue-desc { font-size: 0.88rem; line-height: 1.5; }
-  .issue-time { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+  /* INFO GRID */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .info-item { background: var(--surface2); border-radius: var(--radius-sm); padding: 10px 12px; border: 1px solid var(--border); }
+  .info-label { font-family: var(--font-mono); font-size: 0.57rem; color: var(--muted); margin-bottom: 3px; letter-spacing: 0.05em; }
+  .info-value { font-size: 0.85rem; font-weight: 600; word-break: break-word; }
 
-  /* ---- DIVIDER ---- */
-  .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+  /* ISSUE CARD */
+  .issue-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 8px; }
+  .issue-desc { font-size: 0.86rem; line-height: 1.5; }
+  .issue-time { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); margin-top: 4px; }
 
-  /* ---- JOB DETAIL INFO ---- */
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
-  .info-item { background: var(--surface2); border-radius: var(--radius-sm); padding: 10px 12px; }
-  .info-label { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); margin-bottom: 3px; }
-  .info-value { font-size: 0.88rem; font-weight: 600; }
-
-  /* ---- WORKER CARD ---- */
-  .worker-card {
-    display: flex; align-items: center; gap: 12px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
-  }
-  .worker-avatar {
-    width: 40px; height: 40px; background: var(--accent-dim);
-    border: 1px solid var(--accent); border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 1rem; color: var(--accent); flex-shrink: 0;
-  }
-  .worker-info { flex: 1; }
-  .worker-name { font-weight: 700; font-size: 0.9rem; }
-  .worker-role { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
-
-  /* ---- DELAY FORM ---- */
-  .delay-form { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
-  .delay-form .field { margin-bottom: 8px; }
-
-  /* ---- ROOM GRID ---- */
-  .room-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* ROOM GRID */
+  .room-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 480px) { .room-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 640px) { .room-grid { grid-template-columns: repeat(4, 1fr); } }
   .room-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px 14px;
-    cursor: pointer; transition: border-color .2s, transform .15s;
-    text-align: center;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 12px; cursor: pointer; transition: all .2s; text-align: center;
+    position: relative; -webkit-tap-highlight-color: transparent;
   }
-  .room-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-  .room-icon { font-size: 1.8rem; margin-bottom: 8px; }
-  .room-name { font-weight: 700; font-size: 0.85rem; }
-  .room-tasks { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+  .room-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(59,130,246,0.15); }
+  .room-card:active { transform: scale(0.97); }
+  .room-card.extra-room { border-color: var(--purple); border-style: dashed; }
+  .room-card.done-room { border-color: var(--green); }
+  .room-extra-badge { position: absolute; top: 5px; right: 5px; background: var(--purple-dim); border: 1px solid var(--purple); color: var(--purple); font-family: var(--font-mono); font-size: 0.5rem; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+  .room-icon { font-size: 1.7rem; margin-bottom: 7px; }
+  .room-name { font-weight: 700; font-size: 0.8rem; line-height: 1.3; }
+  .room-tasks { font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); margin-top: 3px; }
+
+  /* WORKER CARD */
+  .worker-card { display: flex; align-items: center; gap: 11px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 11px 13px; margin-bottom: 8px; }
+  .worker-avatar { width: 40px; height: 40px; background: var(--accent-dim); border: 1.5px solid var(--accent); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.95rem; color: var(--accent); flex-shrink: 0; }
+  .worker-info { flex: 1; min-width: 0; }
+  .worker-name { font-weight: 700; font-size: 0.88rem; }
+  .worker-role { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); }
+
+  /* DELAY BLOCK */
+  .delay-block { margin-top: 8px; padding: 8px 10px; background: var(--red-dim); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-xs); }
+  .delay-block-label { font-family: var(--font-mono); font-size: 0.57rem; color: var(--red); margin-bottom: 3px; }
+  .delay-block-text { font-size: 0.8rem; color: var(--muted); }
+
+  /* PROGRESS */
+  .progress-wrap { margin-bottom: 16px; }
+  .progress-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .progress-label { font-family: var(--font-mono); font-size: 0.6rem; color: var(--muted); }
+  .progress-bar { background: var(--border); border-radius: 4px; height: 5px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; transition: width .4s ease; background: var(--accent); }
+  .progress-fill.g { background: var(--green); }
+  .progress-fill.y { background: var(--yellow); }
+
+  /* DIVIDER */
+  hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+
+  /* TOAST */
+  #toast {
+    position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%) translateY(16px);
+    background: var(--surface); border: 1px solid var(--accent); color: var(--text);
+    padding: 9px 18px; border-radius: 30px; font-family: var(--font-mono); font-size: 0.72rem;
+    z-index: 999; opacity: 0; transition: all .28s; pointer-events: none; white-space: nowrap;
+    box-shadow: var(--shadow);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* DESKTOP */
+  @media (min-width: 768px) {
+    .content { padding: 22px 28px; }
+    .topbar { padding: 14px 28px; }
+    .fab-bar { padding: 12px 28px; }
+    .modal { border-radius: var(--radius); margin-bottom: 40px; }
+    .modal-overlay { align-items: center; }
+  }
 </style>
 </head>
 <body>
 
-<!-- ======== LOGIN ======== -->
+<div id="toast"></div>
+
+<!-- LOGIN -->
 <div id="view-login" class="view active">
   <div class="login-logo">CleanOps</div>
   <div class="login-tagline">// HOUSEKEEPING SUPERVISOR SYSTEM</div>
   <div class="login-card">
     <h2>Sign In</h2>
     <div class="error-msg" id="login-error"></div>
-    <div class="field">
-      <label>EMAIL ADDRESS</label>
-      <input type="email" id="login-email" placeholder="supervisor@example.com" autocomplete="email">
-    </div>
-    <div class="field">
-      <label>PASSWORD</label>
-      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="field"><label>EMAIL ADDRESS</label><input type="email" id="login-email" placeholder="supervisor@example.com" autocomplete="email"></div>
+    <div class="field"><label>PASSWORD</label><input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password"></div>
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Sign In →</button>
   </div>
 </div>
 
-<!-- ======== DASHBOARD ======== -->
+<!-- DASHBOARD -->
 <div id="view-dashboard" class="view">
   <div class="topbar">
-    <div class="topbar-left">
-      <div>
-        <div class="topbar-title">CleanOps</div>
-        <div class="topbar-sub" id="dash-user-email">—</div>
-      </div>
+    <div class="topbar-left"><span class="topbar-brand">CleanOps</span></div>
+    <div class="topbar-right">
+      <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="dash-user-email"></span>
+      <button class="logout-btn" onclick="doLogout()">Logout</button>
     </div>
-    <button class="logout-btn" onclick="doLogout()">Logout</button>
   </div>
   <div class="content">
     <div class="tabs" id="dash-tabs">
-      <div class="tab active" onclick="switchDashTab('jobs')">Jobs</div>
-      <div class="tab" onclick="switchDashTab('workers')">Workers</div>
+      <div class="tab active" onclick="switchDashTab('jobs')">📋 Jobs</div>
+      <div class="tab" onclick="switchDashTab('workers')">👷 Workers</div>
     </div>
-
-    <!-- JOBS TAB -->
     <div id="dash-jobs-tab">
       <div class="section-head">
-        <div class="section-title">Active Jobs</div>
-        <div class="section-count" id="jobs-count">—</div>
+        <div class="section-title">Your Jobs</div>
+        <div class="section-count" id="jobs-count"></div>
       </div>
       <div id="jobs-list"><div class="loader"><div class="spinner"></div>Loading jobs...</div></div>
     </div>
-
-    <!-- WORKERS TAB -->
     <div id="dash-workers-tab" style="display:none;">
       <div class="section-head">
-        <div class="section-title">Your Workers</div>
-        <div class="section-count" id="workers-count">—</div>
+        <div class="section-title">Your Team</div>
+        <div class="section-count" id="workers-count"></div>
       </div>
       <div id="workers-list"><div class="loader"><div class="spinner"></div>Loading...</div></div>
     </div>
   </div>
-  <div class="fab-bar" id="dash-fab">
-    <button class="btn btn-outline" id="fab-add-worker" style="display:none;" onclick="openWorkerModal()">+ Add Worker</button>
+  <div class="fab-bar">
+    <button class="btn btn-outline btn-sm" id="fab-add-worker" style="display:none;flex:0 0 auto;" onclick="openWorkerModal()">+ Worker</button>
     <button class="btn btn-primary" id="fab-create-job" onclick="showView('view-create-job')">+ Create Job</button>
   </div>
 </div>
 
-<!-- ======== CREATE JOB ======== -->
+<!-- CREATE JOB -->
 <div id="view-create-job" class="view">
   <div class="topbar">
     <div class="topbar-left">
       <button class="back-btn" onclick="showView('view-dashboard')">←</button>
-      <div class="topbar-title">New Job</div>
+      <div><div class="topbar-title">New Job</div><div class="topbar-sub">Fill in site details</div></div>
     </div>
   </div>
   <div class="content">
-    <div class="field">
-      <label>CUSTOMER NAME *</label>
-      <input type="text" id="cj-name" placeholder="e.g. Ravi Kumar">
-    </div>
-    <div class="field">
-      <label>PHONE</label>
-      <input type="tel" id="cj-phone" placeholder="+91 9876543210">
-    </div>
-    <div class="field">
-      <label>ADDRESS</label>
-      <input type="text" id="cj-address" placeholder="Site address">
-    </div>
-    <div class="field">
-      <label>SITE TYPE</label>
-      <select id="cj-site-type">
-        <option value="">Select site type</option>
-        <option value="Residential">Residential</option>
-        <option value="Commercial">Commercial</option>
-        <option value="Villa">Villa</option>
-        <option value="Apartment">Apartment</option>
-        <option value="Office">Office</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>LAYOUT TYPE</label>
-      <select id="cj-layout">
-        <option value="">Select layout</option>
-        <option value="1BHK">1 BHK</option>
-        <option value="2BHK">2 BHK</option>
-        <option value="3BHK">3 BHK</option>
-        <option value="4BHK">4 BHK</option>
-        <option value="Studio">Studio</option>
-        <option value="Villa">Villa</option>
-        <option value="Office">Office</option>
-      </select>
+    <div class="field"><label>CUSTOMER NAME *</label><input type="text" id="cj-name" placeholder="e.g. Ravi Kumar"></div>
+    <div class="field"><label>PHONE</label><input type="tel" id="cj-phone" placeholder="+91 9876543210"></div>
+    <div class="field"><label>ADDRESS</label><input type="text" id="cj-address" placeholder="Site address"></div>
+    <div class="form-row">
+      <div class="field">
+        <label>SITE TYPE</label>
+        <select id="cj-site-type">
+          <option value="">Select</option>
+          <option value="Residential">Residential</option>
+          <option value="Commercial">Commercial</option>
+          <option value="Villa">Villa</option>
+          <option value="Apartment">Apartment</option>
+          <option value="Office">Office</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>LAYOUT TYPE</label>
+        <select id="cj-layout">
+          <option value="">Select</option>
+          <option value="1BHK">1 BHK</option>
+          <option value="2BHK">2 BHK</option>
+          <option value="3BHK">3 BHK</option>
+          <option value="4BHK">4 BHK</option>
+          <option value="Studio">Studio</option>
+          <option value="Villa">Villa</option>
+          <option value="Office">Office</option>
+        </select>
+      </div>
     </div>
     <div class="error-msg" id="cj-error"></div>
   </div>
   <div class="fab-bar">
     <button class="btn btn-outline" onclick="showView('view-dashboard')">Cancel</button>
-    <button class="btn btn-primary" id="cj-submit" onclick="createJob()">Create Job</button>
+    <button class="btn btn-primary" id="cj-submit" onclick="createJob()">Create Job →</button>
   </div>
 </div>
 
-<!-- ======== JOB DETAIL ======== -->
+<!-- JOB DETAIL -->
 <div id="view-job-detail" class="view">
   <div class="topbar">
     <div class="topbar-left">
       <button class="back-btn" onclick="showView('view-dashboard')">←</button>
-      <div>
+      <div style="min-width:0;">
         <div class="topbar-title" id="jd-title">Job</div>
-        <div class="topbar-sub" id="jd-status-sub">—</div>
+        <div class="topbar-sub" id="jd-status-sub"></div>
       </div>
     </div>
   </div>
   <div class="content">
     <div class="info-grid" id="jd-info"></div>
     <div class="tabs">
-      <div class="tab active" onclick="switchJobTab('rooms')">Rooms</div>
-      <div class="tab" onclick="switchJobTab('issues')">Issues</div>
+      <div class="tab active" onclick="switchJobTab('rooms')">🚪 Rooms</div>
+      <div class="tab" onclick="switchJobTab('issues')">⚠️ Issues</div>
     </div>
-
-    <!-- ROOMS -->
     <div id="jd-rooms-tab">
+      <div class="section-head">
+        <div class="section-title">Rooms</div>
+        <button class="btn btn-purple btn-sm" onclick="openAddRoomModal()">+ Extra Room</button>
+      </div>
       <div class="room-grid" id="jd-rooms-grid">
         <div class="loader" style="grid-column:1/-1;"><div class="spinner"></div>Loading rooms...</div>
       </div>
     </div>
-
-    <!-- ISSUES -->
     <div id="jd-issues-tab" style="display:none;">
-      <div class="section-head">
-        <div class="section-title">Issues</div>
-      </div>
+      <div class="section-head"><div class="section-title">Issues</div></div>
       <div id="jd-issues-list"></div>
-      <div class="field" style="margin-top:14px;">
-        <label>LOG NEW ISSUE</label>
-        <textarea id="issue-desc" placeholder="Describe the issue..."></textarea>
-      </div>
+      <hr>
+      <div class="field"><label>LOG NEW ISSUE</label><textarea id="issue-desc" placeholder="Describe the issue found..."></textarea></div>
       <button class="btn btn-outline" onclick="addIssue()">+ Log Issue</button>
     </div>
   </div>
-  <div class="fab-bar" id="jd-fab">
+  <div class="fab-bar">
     <button class="btn btn-danger" id="jd-finish-btn" onclick="finishJob()">✓ Finish Job</button>
   </div>
 </div>
 
-<!-- ======== ROOM / TASKS ======== -->
+<!-- ROOM / TASKS -->
 <div id="view-room" class="view">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" id="room-back-btn" onclick="showView('view-job-detail')">←</button>
-      <div>
+      <button class="back-btn" onclick="showView('view-job-detail')">←</button>
+      <div style="min-width:0;">
         <div class="topbar-title" id="room-title">Room</div>
-        <div class="topbar-sub" id="room-job-name">—</div>
+        <div class="topbar-sub" id="room-job-name"></div>
       </div>
     </div>
   </div>
   <div class="content">
     <div class="stat-row" id="room-stats"></div>
+    <div class="progress-wrap">
+      <div class="progress-header">
+        <span class="progress-label">COMPLETION</span>
+        <span class="progress-label" id="room-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="room-fill" style="width:0%"></div></div>
+    </div>
     <div class="section-head">
       <div class="section-title">Tasks</div>
-      <button class="btn btn-green btn-sm" onclick="openAddTaskModal()">+ Task</button>
+      <button class="btn btn-blue btn-sm" onclick="openAddTaskModal()">+ Add Task</button>
     </div>
     <div id="tasks-list"><div class="loader"><div class="spinner"></div>Loading tasks...</div></div>
   </div>
 </div>
 
-<!-- ======== MODALS ======== -->
+<!-- MODALS -->
 
 <!-- Worker Modal -->
 <div class="modal-overlay" id="worker-modal">
   <div class="modal">
-    <div class="modal-title">Add Worker</div>
+    <div class="modal-handle"></div>
+    <div class="modal-title">👷 Add Worker</div>
     <div class="field"><label>NAME *</label><input type="text" id="w-name" placeholder="Worker name"></div>
-    <div class="field"><label>PHONE</label><input type="tel" id="w-phone" placeholder="+91 9876543210"></div>
-    <div class="field">
-      <label>ROLE</label>
-      <select id="w-role">
-        <option value="">Select role</option>
-        <option value="Cleaner">Cleaner</option>
-        <option value="Senior Cleaner">Senior Cleaner</option>
-        <option value="Supervisor">Supervisor</option>
-        <option value="Helper">Helper</option>
-        <option value="Specialist">Specialist</option>
-      </select>
+    <div class="form-row">
+      <div class="field"><label>PHONE</label><input type="tel" id="w-phone" placeholder="+91..."></div>
+      <div class="field">
+        <label>ROLE</label>
+        <select id="w-role">
+          <option value="">Select</option>
+          <option value="Cleaner">Cleaner</option>
+          <option value="Senior Cleaner">Senior Cleaner</option>
+          <option value="Supervisor">Supervisor</option>
+          <option value="Helper">Helper</option>
+          <option value="Specialist">Specialist</option>
+        </select>
+      </div>
     </div>
     <div class="error-msg" id="w-error"></div>
     <div class="modal-actions">
@@ -525,24 +485,21 @@
 <!-- Add Task Modal -->
 <div class="modal-overlay" id="task-modal">
   <div class="modal">
-    <div class="modal-title">Add Task</div>
-    <div class="field"><label>TASK NAME *</label><input type="text" id="t-name" placeholder="e.g. Mop floor"></div>
-    <div class="field">
-      <label>ASSIGN WORKER</label>
-      <select id="t-worker"><option value="">Unassigned</option></select>
-    </div>
-    <div class="field">
-      <label>ESTIMATED TIME (minutes)</label>
-      <input type="number" id="t-est-time" placeholder="30" min="1">
-    </div>
-    <div class="field">
-      <label>DIFFICULTY</label>
-      <select id="t-diff">
-        <option value="">Select</option>
-        <option value="easy">Easy</option>
-        <option value="medium">Medium</option>
-        <option value="hard">Hard</option>
-      </select>
+    <div class="modal-handle"></div>
+    <div class="modal-title">✅ Add Task</div>
+    <div class="field"><label>TASK NAME *</label><input type="text" id="t-name" placeholder="e.g. Mop floor, Wipe windows..."></div>
+    <div class="field"><label>ASSIGN WORKER</label><select id="t-worker"><option value="">Unassigned</option></select></div>
+    <div class="form-row">
+      <div class="field"><label>EST. TIME (mins)</label><input type="number" id="t-est-time" placeholder="30" min="1"></div>
+      <div class="field">
+        <label>DIFFICULTY</label>
+        <select id="t-diff">
+          <option value="">Select</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
     </div>
     <div class="error-msg" id="t-error"></div>
     <div class="modal-actions">
@@ -552,15 +509,50 @@
   </div>
 </div>
 
-<!-- Delay Reason Modal -->
+<!-- Add Extra Room Modal -->
+<div class="modal-overlay" id="add-room-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚪 Add Extra Room</div>
+    <p style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);margin-bottom:16px;">Add any room not included in the standard layout — store rooms, pooja rooms, balconies, etc.</p>
+    <div class="field">
+      <label>ROOM TYPE</label>
+      <select id="er-preset" onchange="onRoomPresetChange()">
+        <option value="">Choose a preset...</option>
+        <option value="Store Room">📦 Store Room</option>
+        <option value="Pooja Room">🪔 Pooja Room</option>
+        <option value="Servant Room">🛏️ Servant Room</option>
+        <option value="Balcony">🌸 Balcony</option>
+        <option value="Terrace">🌿 Terrace</option>
+        <option value="Garage">🚗 Garage</option>
+        <option value="Utility Room">🔧 Utility Room</option>
+        <option value="Guest Room">🛋️ Guest Room</option>
+        <option value="Study Room">📚 Study Room</option>
+        <option value="Gym Room">💪 Gym Room</option>
+        <option value="Home Theatre">🎬 Home Theatre</option>
+        <option value="Laundry Room">🧺 Laundry Room</option>
+        <option value="custom">✏️ Custom Name...</option>
+      </select>
+    </div>
+    <div class="field" id="er-custom-field" style="display:none;">
+      <label>CUSTOM ROOM NAME *</label>
+      <input type="text" id="er-custom-name" placeholder="e.g. Attic, Basement, Wine Cellar...">
+    </div>
+    <div class="error-msg" id="er-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('add-room-modal')">Cancel</button>
+      <button class="btn btn-purple" onclick="addExtraRoom()">+ Add Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delay Modal -->
 <div class="modal-overlay" id="delay-modal">
   <div class="modal">
-    <div class="modal-title">⚠ Task Delayed</div>
-    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:16px;font-family:var(--font-mono);">Actual time exceeded estimated time. Please provide a reason.</p>
-    <div class="field">
-      <label>DELAY REASON</label>
-      <textarea id="delay-reason-input" placeholder="e.g. Stubborn stains, extra area..."></textarea>
-    </div>
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚠️ Task Delayed</div>
+    <p style="color:var(--muted);font-size:0.78rem;margin-bottom:14px;font-family:var(--font-mono);">Actual time exceeded estimated time. Provide a reason (optional).</p>
+    <div class="field"><label>DELAY REASON</label><textarea id="delay-reason-input" placeholder="e.g. Stubborn stains required extra scrubbing..."></textarea></div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="submitDelay(false)">Skip</button>
       <button class="btn btn-danger" onclick="submitDelay(true)">Save Reason</button>
@@ -574,126 +566,119 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// ---- STATE ----
-let currentUser = null;
-let currentJob = null;
-let currentRoom = null;
-let currentTasks = [];
-let allWorkers = [];
-let delayTaskId = null;
-let currentDashTab = 'jobs';
-let currentJobTab = 'rooms';
+// STATE
+let currentUser = null, currentJob = null, currentRoom = null;
+let currentTasks = [], allWorkers = [], delayTaskId = null;
+let taskCache = {}; // roomId -> tasks[] — persists across room visits
 
-// ---- LAYOUTS ----
+// LAYOUTS
 const LAYOUTS = {
   '1BHK': ['Living Room','Bedroom','Kitchen','Bathroom'],
   '2BHK': ['Living Room','Bedroom 1','Bedroom 2','Kitchen','Bathroom 1','Bathroom 2'],
   '3BHK': ['Living Room','Bedroom 1','Bedroom 2','Bedroom 3','Kitchen','Bathroom 1','Bathroom 2','Bathroom 3'],
   '4BHK': ['Living Room','Bedroom 1','Bedroom 2','Bedroom 3','Bedroom 4','Kitchen','Bathroom 1','Bathroom 2','Bathroom 3','Bathroom 4'],
   'Studio': ['Studio Room','Kitchen','Bathroom'],
-  'Villa': ['Living Room','Dining Room','Kitchen','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom 1','Bathroom 2','Bathroom 3','Terrace','Garden Area'],
+  'Villa': ['Living Room','Dining Room','Kitchen','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom 1','Bathroom 2','Terrace','Garden Area'],
   'Office': ['Reception','Conference Room','Manager Cabin','Open Work Area','Pantry','Washroom 1','Washroom 2']
 };
-
 const ROOM_ICONS = {
   'Living Room':'🛋️','Bedroom':'🛏️','Bedroom 1':'🛏️','Bedroom 2':'🛏️','Bedroom 3':'🛏️','Bedroom 4':'🛏️',
   'Kitchen':'🍳','Bathroom':'🚿','Bathroom 1':'🚿','Bathroom 2':'🚿','Bathroom 3':'🚿','Bathroom 4':'🚿',
   'Studio Room':'🏠','Dining Room':'🍽️','Terrace':'🌿','Garden Area':'🌳',
   'Reception':'🪑','Conference Room':'💼','Manager Cabin':'🖥️','Open Work Area':'📋','Pantry':'☕',
-  'Washroom 1':'🚽','Washroom 2':'🚽'
+  'Washroom 1':'🚽','Washroom 2':'🚽',
+  'Store Room':'📦','Pooja Room':'🪔','Servant Room':'🛏️','Balcony':'🌸','Garage':'🚗',
+  'Utility Room':'🔧','Guest Room':'🛋️','Study Room':'📚','Gym Room':'💪',
+  'Home Theatre':'🎬','Laundry Room':'🧺'
 };
 
-// ---- INIT ----
+// INIT
 (async () => {
   const { data: { session } } = await db.auth.getSession();
-  if (session?.user) {
-    currentUser = session.user;
-    enterApp();
-  }
-  db.auth.onAuthStateChange((_event, session) => {
-    if (session?.user && !currentUser) {
-      currentUser = session.user;
-      enterApp();
-    }
-  });
+  if (session?.user) { currentUser = session.user; enterApp(); }
+  db.auth.onAuthStateChange((_e, s) => { if (s?.user && !currentUser) { currentUser = s.user; enterApp(); } });
 })();
 
-// ---- AUTH ----
+// AUTH
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const pw = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   const btn = document.getElementById('login-btn');
   errEl.classList.remove('show');
-  if (!email || !pw) { showError(errEl, 'Please fill all fields'); return; }
+  if (!email || !pw) { showErr(errEl, 'Please fill all fields'); return; }
   btn.disabled = true; btn.textContent = 'Signing in...';
   const { data, error } = await db.auth.signInWithPassword({ email, password: pw });
-  btn.disabled = false; btn.textContent = 'Sign In';
-  if (error) { showError(errEl, error.message); return; }
-  currentUser = data.user;
-  enterApp();
+  btn.disabled = false; btn.textContent = 'Sign In →';
+  if (error) { showErr(errEl, error.message); return; }
+  currentUser = data.user; enterApp();
 }
 
 async function doLogout() {
   await db.auth.signOut();
-  currentUser = null; currentJob = null; currentRoom = null;
+  currentUser = null; currentJob = null; currentRoom = null; taskCache = {};
   showView('view-login');
 }
 
 function enterApp() {
-  document.getElementById('dash-user-email').textContent = currentUser.email;
+  const e = currentUser.email || '';
+  document.getElementById('dash-user-email').textContent = e.length > 20 ? e.substring(0, 17) + '...' : e;
   showView('view-dashboard');
-  loadJobs();
-  loadWorkers();
+  loadJobs(); loadWorkers();
 }
 
-// ---- VIEW ROUTER ----
+// VIEWS
 function showView(id) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0, 0);
 }
 
-function showError(el, msg) {
-  el.textContent = msg; el.classList.add('show');
+// TOAST
+let toastTimer;
+function toast(msg, borderColor) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = borderColor || 'var(--accent)';
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
+function showErr(el, msg) { el.textContent = msg; el.classList.add('show'); }
+function clearErr(el) { el.classList.remove('show'); }
 
-// ---- DASHBOARD TABS ----
+// DASHBOARD TABS
 function switchDashTab(tab) {
-  currentDashTab = tab;
-  document.querySelectorAll('#dash-tabs .tab').forEach((t, i) => {
-    t.classList.toggle('active', (i === 0 && tab === 'jobs') || (i === 1 && tab === 'workers'));
-  });
+  document.querySelectorAll('#dash-tabs .tab').forEach((t, i) =>
+    t.classList.toggle('active', (i === 0 && tab === 'jobs') || (i === 1 && tab === 'workers')));
   document.getElementById('dash-jobs-tab').style.display = tab === 'jobs' ? '' : 'none';
   document.getElementById('dash-workers-tab').style.display = tab === 'workers' ? '' : 'none';
   document.getElementById('fab-create-job').style.display = tab === 'jobs' ? '' : 'none';
   document.getElementById('fab-add-worker').style.display = tab === 'workers' ? '' : 'none';
 }
 
-// ---- JOBS ----
+// JOBS
 async function loadJobs() {
-  const { data: jobs, error } = await db.from('jobs')
-    .select('*').eq('user_id', currentUser.id)
-    .order('created_at', { ascending: false });
+  const { data: jobs } = await db.from('jobs').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   const listEl = document.getElementById('jobs-list');
-  if (error || !jobs?.length) {
-    listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>No jobs yet. Create your first job!</div>`;
+  if (!jobs?.length) {
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>No jobs yet.<br>Create your first job!</div>`;
     document.getElementById('jobs-count').textContent = '0 jobs';
     return;
   }
   document.getElementById('jobs-count').textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''}`;
   listEl.innerHTML = jobs.map(j => {
-    const statusClass = j.status === 'completed' ? '' : j.status === 'ongoing' ? 'yellow' : 'grey';
-    const badgeClass = j.status === 'completed' ? 'badge-green' : j.status === 'ongoing' ? 'badge-yellow' : 'badge-muted';
+    const cls = j.status === 'completed' ? 'green' : j.status === 'ongoing' ? 'yellow' : 'grey';
+    const b = j.status === 'completed' ? 'badge-green' : j.status === 'ongoing' ? 'badge-yellow' : 'badge-muted';
     return `
-    <div class="card ${statusClass}" onclick="openJob('${j.id}')">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+    <div class="card ${cls}" onclick="openJob('${j.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px;">
         <div class="card-title">${esc(j.customer_name)}</div>
-        <span class="badge ${badgeClass}">${j.status}</span>
+        <span class="badge ${b}" style="flex-shrink:0;">${j.status}</span>
       </div>
-      <div class="card-meta">${esc(j.layout_type || '—')} · ${esc(j.site_type || '—')}</div>
-      <div class="card-meta" style="margin-top:2px;">${esc(j.address || '—')}</div>
-      <div class="card-meta" style="margin-top:2px;">${fmtDate(j.created_at)}</div>
+      <div class="card-meta">${esc(j.layout_type || '—')} &nbsp;·&nbsp; ${esc(j.site_type || '—')}</div>
+      <div class="card-meta">${esc(j.address || '—')}</div>
+      <div class="card-meta">${fmtDate(j.created_at)}</div>
     </div>`;
   }).join('');
 }
@@ -710,59 +695,49 @@ async function openJob(jobId) {
     <div class="info-item"><div class="info-label">STATUS</div><div class="info-value">${esc(job.status)}</div></div>
     <div class="info-item" style="grid-column:1/-1;"><div class="info-label">ADDRESS</div><div class="info-value">${esc(job.address || '—')}</div></div>
   `;
-  const finBtn = document.getElementById('jd-finish-btn');
-  finBtn.style.display = job.status === 'completed' ? 'none' : '';
-
-  // reset to rooms tab
+  document.getElementById('jd-finish-btn').style.display = job.status === 'completed' ? 'none' : '';
   switchJobTab('rooms');
   showView('view-job-detail');
   loadRooms(jobId);
   loadIssues(jobId);
 }
 
-// ---- JOB TABS ----
+// JOB TABS
 function switchJobTab(tab) {
-  currentJobTab = tab;
-  document.querySelectorAll('#view-job-detail .tabs .tab').forEach((t, i) => {
-    t.classList.toggle('active', (i === 0 && tab === 'rooms') || (i === 1 && tab === 'issues'));
-  });
+  document.querySelectorAll('#view-job-detail .tabs .tab').forEach((t, i) =>
+    t.classList.toggle('active', (i === 0 && tab === 'rooms') || (i === 1 && tab === 'issues')));
   document.getElementById('jd-rooms-tab').style.display = tab === 'rooms' ? '' : 'none';
   document.getElementById('jd-issues-tab').style.display = tab === 'issues' ? '' : 'none';
 }
 
-// ---- CREATE JOB ----
+// CREATE JOB
 async function createJob() {
   const name = document.getElementById('cj-name').value.trim();
   const phone = document.getElementById('cj-phone').value.trim();
   const address = document.getElementById('cj-address').value.trim();
   const siteType = document.getElementById('cj-site-type').value;
   const layout = document.getElementById('cj-layout').value;
-  const errEl = document.getElementById('cj-error');
-  errEl.classList.remove('show');
-  if (!name) { showError(errEl, 'Customer name is required'); return; }
+  const errEl = document.getElementById('cj-error'); clearErr(errEl);
+  if (!name) { showErr(errEl, 'Customer name is required'); return; }
   const btn = document.getElementById('cj-submit');
   btn.disabled = true; btn.textContent = 'Creating...';
   const { data: job, error } = await db.from('jobs').insert({
     user_id: currentUser.id, customer_name: name, phone, address,
     site_type: siteType, layout_type: layout, status: 'ongoing'
   }).select().single();
-  if (error) { showError(errEl, error.message); btn.disabled = false; btn.textContent = 'Create Job'; return; }
-
-  // auto-create rooms
+  if (error) { showErr(errEl, error.message); btn.disabled = false; btn.textContent = 'Create Job →'; return; }
   if (layout && LAYOUTS[layout]) {
-    const roomRows = LAYOUTS[layout].map(rn => ({ job_id: job.id, room_name: rn }));
-    await db.from('rooms').insert(roomRows);
+    await db.from('rooms').insert(LAYOUTS[layout].map(rn => ({ job_id: job.id, room_name: rn })));
   }
-  btn.disabled = false; btn.textContent = 'Create Job';
-  // clear form
+  btn.disabled = false; btn.textContent = 'Create Job →';
   ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('cj-site-type').value = '';
   document.getElementById('cj-layout').value = '';
-  showView('view-dashboard');
-  loadJobs();
+  toast('✅ Job created successfully!');
+  showView('view-dashboard'); loadJobs();
 }
 
-// ---- ROOMS ----
+// ROOMS
 async function loadRooms(jobId) {
   document.getElementById('jd-rooms-grid').innerHTML = `<div class="loader" style="grid-column:1/-1;"><div class="spinner"></div>Loading rooms...</div>`;
   const { data: rooms } = await db.from('rooms').select('*').eq('job_id', jobId).order('created_at');
@@ -770,46 +745,80 @@ async function loadRooms(jobId) {
     document.getElementById('jd-rooms-grid').innerHTML = `<div class="empty" style="grid-column:1/-1;"><div class="empty-icon">🚪</div>No rooms found</div>`;
     return;
   }
-  // Get task counts per room
-  const roomIds = rooms.map(r => r.id);
-  const { data: tasks } = await db.from('tasks').select('id,room_id,status').in('room_id', roomIds);
-  const taskMap = {};
+  // Batch-fetch task counts
+  const { data: tasks } = await db.from('tasks').select('id,room_id,status').in('room_id', rooms.map(r => r.id));
+  const tmap = {};
   (tasks || []).forEach(t => {
-    if (!taskMap[t.room_id]) taskMap[t.room_id] = { total: 0, done: 0 };
-    taskMap[t.room_id].total++;
-    if (t.status === 'completed') taskMap[t.room_id].done++;
+    if (!tmap[t.room_id]) tmap[t.room_id] = { total: 0, done: 0 };
+    tmap[t.room_id].total++;
+    if (t.status === 'completed') tmap[t.room_id].done++;
   });
+  const stdRooms = currentJob?.layout_type && LAYOUTS[currentJob.layout_type] ? LAYOUTS[currentJob.layout_type] : [];
   document.getElementById('jd-rooms-grid').innerHTML = rooms.map(r => {
-    const tm = taskMap[r.id] || { total: 0, done: 0 };
+    const tm = tmap[r.id] || { total: 0, done: 0 };
     const icon = ROOM_ICONS[r.room_name] || '🚪';
     const allDone = tm.total > 0 && tm.done === tm.total;
+    const isExtra = !stdRooms.includes(r.room_name);
     return `
-    <div class="room-card ${allDone ? 'border-green' : ''}" onclick="openRoom('${r.id}', '${esc(r.room_name)}')">
+    <div class="room-card ${allDone ? 'done-room' : ''} ${isExtra ? 'extra-room' : ''}" onclick="openRoom('${r.id}','${esc(r.room_name)}')">
+      ${isExtra ? '<span class="room-extra-badge">EXTRA</span>' : ''}
       <div class="room-icon">${icon}</div>
       <div class="room-name">${esc(r.room_name)}</div>
-      <div class="room-tasks">${tm.done}/${tm.total} tasks done</div>
-      ${allDone ? '<span class="badge badge-green" style="margin-top:6px;font-size:0.6rem;">DONE</span>' : ''}
+      <div class="room-tasks">${tm.done}/${tm.total} done</div>
+      ${allDone ? '<div style="margin-top:5px;"><span class="badge badge-green" style="font-size:0.52rem;">✓ DONE</span></div>' : ''}
     </div>`;
   }).join('');
 }
 
-// ---- OPEN ROOM ----
+// EXTRA ROOM
+function openAddRoomModal() {
+  document.getElementById('er-preset').value = '';
+  document.getElementById('er-custom-name').value = '';
+  document.getElementById('er-custom-field').style.display = 'none';
+  document.getElementById('er-error').classList.remove('show');
+  openModal('add-room-modal');
+}
+function onRoomPresetChange() {
+  const v = document.getElementById('er-preset').value;
+  document.getElementById('er-custom-field').style.display = v === 'custom' ? '' : 'none';
+}
+async function addExtraRoom() {
+  const preset = document.getElementById('er-preset').value;
+  const customName = document.getElementById('er-custom-name').value.trim();
+  const errEl = document.getElementById('er-error'); clearErr(errEl);
+  if (!preset) { showErr(errEl, 'Please select a room type'); return; }
+  const roomName = preset === 'custom' ? customName : preset;
+  if (!roomName) { showErr(errEl, 'Please enter a custom room name'); return; }
+  const { error } = await db.from('rooms').insert({ job_id: currentJob.id, room_name: roomName });
+  if (error) { showErr(errEl, error.message); return; }
+  closeModal('add-room-modal');
+  toast(`🚪 "${roomName}" added!`, 'var(--purple)');
+  await loadRooms(currentJob.id);
+}
+
+// OPEN ROOM (with task cache)
 async function openRoom(roomId, roomName) {
   currentRoom = { id: roomId, name: roomName };
   document.getElementById('room-title').textContent = roomName;
-  document.getElementById('room-job-name').textContent = currentJob.customer_name;
+  document.getElementById('room-job-name').textContent = currentJob?.customer_name || '';
   showView('view-room');
-  loadTasks(roomId);
+  // Use cached tasks if available — no extra API call
+  if (taskCache[roomId]) {
+    currentTasks = taskCache[roomId];
+    renderTasks(); renderRoomStats();
+  } else {
+    await loadTasks(roomId);
+  }
 }
 
-// ---- TASKS ----
+// TASKS
 async function loadTasks(roomId) {
   document.getElementById('tasks-list').innerHTML = `<div class="loader"><div class="spinner"></div>Loading tasks...</div>`;
   const { data: tasks } = await db.from('tasks')
     .select('*, workers(name, role)').eq('room_id', roomId).order('status');
   currentTasks = tasks || [];
-  renderTasks();
-  renderRoomStats();
+  taskCache[roomId] = currentTasks;
+  renderTasks(); renderRoomStats();
 }
 
 function renderRoomStats() {
@@ -817,86 +826,80 @@ function renderRoomStats() {
   const done = currentTasks.filter(t => t.status === 'completed').length;
   const inProg = currentTasks.filter(t => t.status === 'in_progress').length;
   const delayed = currentTasks.filter(t => t.status === 'delayed').length;
+  const pending = currentTasks.filter(t => t.status === 'not_started').length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   document.getElementById('room-stats').innerHTML = `
-    <div class="stat-box"><div class="stat-num" style="color:var(--accent)">${done}</div><div class="stat-label">DONE</div></div>
-    <div class="stat-box"><div class="stat-num" style="color:var(--yellow)">${inProg}</div><div class="stat-label">IN PROGRESS</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--green)">${done}</div><div class="stat-label">DONE</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--yellow)">${inProg}</div><div class="stat-label">ACTIVE</div></div>
     <div class="stat-box"><div class="stat-num" style="color:var(--red)">${delayed}</div><div class="stat-label">DELAYED</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--muted)">${pending}</div><div class="stat-label">PENDING</div></div>
   `;
+  document.getElementById('room-pct').textContent = `${pct}%`;
+  const fill = document.getElementById('room-fill');
+  fill.style.width = `${pct}%`;
+  fill.className = `progress-fill ${pct === 100 ? 'g' : pct > 50 ? '' : 'y'}`;
 }
 
 function renderTasks() {
-  const listEl = document.getElementById('tasks-list');
+  const el = document.getElementById('tasks-list');
   if (!currentTasks.length) {
-    listEl.innerHTML = `<div class="empty"><div class="empty-icon">✅</div>No tasks yet. Add one!</div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">✅</div>No tasks yet.<br>Tap "+ Add Task" to begin.</div>`;
     return;
   }
-  listEl.innerHTML = currentTasks.map(t => taskCard(t)).join('');
+  el.innerHTML = currentTasks.map(taskCard).join('');
 }
 
 function taskCard(t) {
-  const statusBadge = {
-    'not_started': '<span class="badge badge-muted">NOT STARTED</span>',
-    'in_progress': '<span class="badge badge-yellow">IN PROGRESS</span>',
-    'completed': '<span class="badge badge-green">COMPLETED</span>',
-    'delayed': '<span class="badge badge-red">DELAYED</span>',
-  }[t.status] || '<span class="badge badge-muted">UNKNOWN</span>';
-
-  const workerName = t.workers?.name ? `👤 ${t.workers.name} (${t.workers.role || '—'})` : '👤 Unassigned';
-  const estTime = t.estimated_time ? `⏱ Est: ${t.estimated_time}m` : '';
-  const actTime = t.actual_time ? `⏱ Actual: ${t.actual_time}m` : '';
-
+  const badges = {
+    'not_started':'<span class="badge badge-muted">NOT STARTED</span>',
+    'in_progress':'<span class="badge badge-yellow">▶ IN PROGRESS</span>',
+    'completed':'<span class="badge badge-green">✓ DONE</span>',
+    'delayed':'<span class="badge badge-red">⚠ DELAYED</span>',
+  };
+  const workerName = t.workers?.name ? `👤 ${t.workers.name}${t.workers.role ? ` (${t.workers.role})` : ''}` : '👤 Unassigned';
   let actions = '';
-  if (t.status === 'not_started') {
-    actions = `<button class="btn btn-yellow btn-sm" onclick="startTask('${t.id}')">▶ Start</button>`;
-  } else if (t.status === 'in_progress') {
-    actions = `<button class="btn btn-green btn-sm" onclick="completeTask('${t.id}')">✓ Complete</button>`;
-  }
-  const delayBlock = (t.status === 'delayed' && t.delay_reason) ?
-    `<div class="delay-form"><div class="info-label" style="font-size:0.62rem;color:var(--red);font-family:var(--font-mono);">DELAY REASON</div><div style="font-size:0.8rem;color:var(--muted);margin-top:3px;">${esc(t.delay_reason)}</div></div>` : '';
+  if (t.status === 'not_started') actions = `<button class="btn btn-yellow btn-sm" onclick="startTask('${t.id}')">▶ Start</button>`;
+  else if (t.status === 'in_progress') actions = `<button class="btn btn-green btn-sm" onclick="completeTask('${t.id}')">✓ Complete</button>`;
+  const timeBadges = [
+    t.estimated_time ? `<span class="badge badge-muted">⏱ Est ${t.estimated_time}m</span>` : '',
+    t.actual_time ? `<span class="badge badge-blue">⏱ Actual ${t.actual_time}m</span>` : '',
+    t.difficulty ? `<span class="badge badge-muted">${t.difficulty}</span>` : '',
+  ].filter(Boolean).join('');
+  const delayBlock = (t.status === 'delayed' && t.delay_reason)
+    ? `<div class="delay-block"><div class="delay-block-label">DELAY REASON</div><div class="delay-block-text">${esc(t.delay_reason)}</div></div>` : '';
 
   return `
-  <div class="task-card">
+  <div class="task-card s-${t.status}">
     <div class="task-top">
-      <div>
+      <div style="min-width:0;">
         <div class="task-name">${esc(t.task_name)}</div>
         <div class="task-worker">${workerName}</div>
       </div>
-      ${statusBadge}
+      <div style="flex-shrink:0;">${badges[t.status] || ''}</div>
     </div>
-    <div class="task-meta">
-      ${estTime ? `<span class="badge badge-muted">${estTime}</span>` : ''}
-      ${actTime ? `<span class="badge badge-blue">${actTime}</span>` : ''}
-      ${t.difficulty ? `<span class="badge badge-muted">${t.difficulty}</span>` : ''}
-    </div>
+    ${timeBadges ? `<div class="task-meta">${timeBadges}</div>` : ''}
     ${delayBlock}
-    <div class="task-actions">${actions}</div>
+    ${actions ? `<div class="task-actions">${actions}</div>` : ''}
   </div>`;
 }
 
 async function startTask(taskId) {
   await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
+  delete taskCache[currentRoom.id];
   await loadTasks(currentRoom.id);
+  toast('▶ Task started!', 'var(--yellow)');
 }
 
 async function completeTask(taskId) {
   const task = currentTasks.find(t => t.id === taskId);
   const now = new Date();
   const startedAt = task.started_at ? new Date(task.started_at) : now;
-  const actualMinutes = Math.round((now - startedAt) / 60000) || 1;
+  const actualMinutes = Math.max(1, Math.round((now - startedAt) / 60000));
   const isDelayed = task.estimated_time && actualMinutes > task.estimated_time;
-
-  await db.from('tasks').update({
-    status: isDelayed ? 'delayed' : 'completed',
-    completed_at: now.toISOString(),
-    actual_time: actualMinutes
-  }).eq('id', taskId);
-
-  if (isDelayed) {
-    delayTaskId = taskId;
-    openModal('delay-modal');
-  } else {
-    await loadTasks(currentRoom.id);
-  }
+  await db.from('tasks').update({ status: isDelayed ? 'delayed' : 'completed', completed_at: now.toISOString(), actual_time: actualMinutes }).eq('id', taskId);
+  delete taskCache[currentRoom.id];
+  if (isDelayed) { delayTaskId = taskId; openModal('delay-modal'); }
+  else { await loadTasks(currentRoom.id); toast('✅ Task completed!', 'var(--green)'); }
 }
 
 async function submitDelay(withReason) {
@@ -907,15 +910,16 @@ async function submitDelay(withReason) {
   document.getElementById('delay-reason-input').value = '';
   delayTaskId = null;
   closeModal('delay-modal');
+  delete taskCache[currentRoom.id];
   await loadTasks(currentRoom.id);
+  toast('⚠️ Marked as delayed', 'var(--red)');
 }
 
-// ---- ADD TASK MODAL ----
+// ADD TASK
 async function openAddTaskModal() {
-  // Populate worker dropdown
   const sel = document.getElementById('t-worker');
   sel.innerHTML = '<option value="">Unassigned</option>' +
-    allWorkers.map(w => `<option value="${w.id}">${esc(w.name)} (${esc(w.role || '—')})</option>`).join('');
+    allWorkers.map(w => `<option value="${w.id}">${esc(w.name)}${w.role ? ` (${esc(w.role)})` : ''}</option>`).join('');
   ['t-name','t-est-time'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('t-diff').value = '';
   document.getElementById('t-error').classList.remove('show');
@@ -928,35 +932,30 @@ async function addTask() {
   const estTime = parseInt(document.getElementById('t-est-time').value) || null;
   const diff = document.getElementById('t-diff').value || null;
   const errEl = document.getElementById('t-error');
-  if (!name) { showError(errEl, 'Task name is required'); return; }
-  await db.from('tasks').insert({
-    room_id: currentRoom.id, task_name: name,
-    assigned_worker_id: workerId, estimated_time: estTime,
-    difficulty: diff, status: 'not_started'
-  });
+  if (!name) { showErr(errEl, 'Task name is required'); return; }
+  const { error } = await db.from('tasks').insert({ room_id: currentRoom.id, task_name: name, assigned_worker_id: workerId, estimated_time: estTime, difficulty: diff, status: 'not_started' });
+  if (error) { showErr(errEl, error.message); return; }
   closeModal('task-modal');
+  delete taskCache[currentRoom.id];
   await loadTasks(currentRoom.id);
+  toast('Task added!');
 }
 
-// ---- WORKERS ----
+// WORKERS
 async function loadWorkers() {
-  const { data: workers } = await db.from('workers')
-    .select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  const { data: workers } = await db.from('workers').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
   allWorkers = workers || [];
   const listEl = document.getElementById('workers-list');
   document.getElementById('workers-count').textContent = `${allWorkers.length} worker${allWorkers.length !== 1 ? 's' : ''}`;
-  if (!allWorkers.length) {
-    listEl.innerHTML = `<div class="empty"><div class="empty-icon">👷</div>No workers yet. Add your team!</div>`;
-    return;
-  }
+  if (!allWorkers.length) { listEl.innerHTML = `<div class="empty"><div class="empty-icon">👷</div>No workers yet.<br>Add your team!</div>`; return; }
   listEl.innerHTML = allWorkers.map(w => `
     <div class="worker-card">
       <div class="worker-avatar">${w.name.charAt(0).toUpperCase()}</div>
       <div class="worker-info">
         <div class="worker-name">${esc(w.name)}</div>
-        <div class="worker-role">${esc(w.role || '—')} · ${esc(w.phone || '—')}</div>
+        <div class="worker-role">${esc(w.role || 'No role')} · ${esc(w.phone || '—')}</div>
       </div>
-      <span class="badge badge-muted">${esc(w.role || 'Staff')}</span>
+      <span class="badge badge-blue">${esc(w.role || 'Staff')}</span>
     </div>`).join('');
 }
 
@@ -972,24 +971,18 @@ async function addWorker() {
   const phone = document.getElementById('w-phone').value.trim();
   const role = document.getElementById('w-role').value;
   const errEl = document.getElementById('w-error');
-  if (!name) { showError(errEl, 'Worker name is required'); return; }
-  const { error } = await db.from('workers').insert({
-    user_id: currentUser.id, name, phone, role
-  });
-  if (error) { showError(errEl, error.message); return; }
+  if (!name) { showErr(errEl, 'Worker name is required'); return; }
+  const { error } = await db.from('workers').insert({ user_id: currentUser.id, name, phone, role });
+  if (error) { showErr(errEl, error.message); return; }
   closeModal('worker-modal');
-  await loadWorkers();
+  toast('👷 Worker added!'); await loadWorkers();
 }
 
-// ---- ISSUES ----
+// ISSUES
 async function loadIssues(jobId) {
-  const { data: issues } = await db.from('issues')
-    .select('*').eq('job_id', jobId).order('created_at', { ascending: false });
+  const { data: issues } = await db.from('issues').select('*').eq('job_id', jobId).order('created_at', { ascending: false });
   const listEl = document.getElementById('jd-issues-list');
-  if (!issues?.length) {
-    listEl.innerHTML = `<div class="empty" style="padding:20px 0;"><div class="empty-icon" style="font-size:1.5rem;">⚠️</div>No issues logged</div>`;
-    return;
-  }
+  if (!issues?.length) { listEl.innerHTML = `<div class="empty" style="padding:16px 0;"><div class="empty-icon" style="font-size:1.4rem;">✅</div>No issues logged</div>`; return; }
   listEl.innerHTML = issues.map(i => `
     <div class="issue-card">
       <div class="issue-desc">${esc(i.description || '—')}</div>
@@ -1002,39 +995,31 @@ async function addIssue() {
   if (!desc || !currentJob) return;
   await db.from('issues').insert({ job_id: currentJob.id, description: desc });
   document.getElementById('issue-desc').value = '';
+  toast('⚠️ Issue logged', 'var(--yellow)');
   await loadIssues(currentJob.id);
 }
 
-// ---- FINISH JOB ----
+// FINISH JOB
 async function finishJob() {
   if (!currentJob) return;
   if (!confirm(`Mark job for "${currentJob.customer_name}" as completed?`)) return;
   await db.from('jobs').update({ status: 'completed', site_out_time: new Date().toISOString() }).eq('id', currentJob.id);
   await db.from('customer_verifications').insert({ job_id: currentJob.id, verified: true, verified_at: new Date().toISOString() });
   currentJob.status = 'completed';
-  document.getElementById('jd-status-sub').textContent = `${currentJob.layout_type || ''} · completed`;
   document.getElementById('jd-finish-btn').style.display = 'none';
-  alert('✅ Job marked as completed! Customer verification saved.');
-  showView('view-dashboard');
-  await loadJobs();
+  toast('✅ Job completed & verified!', 'var(--green)');
+  setTimeout(() => { showView('view-dashboard'); loadJobs(); }, 1200);
 }
 
-// ---- MODAL HELPERS ----
+// MODALS
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
-});
+document.querySelectorAll('.modal-overlay').forEach(m =>
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
 
-// ---- UTILS ----
-function esc(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function fmtDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-}
+// UTILS
+function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDate(iso) { if (!iso) return '—'; return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
 </script>
 </body>
 </html>
