@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CleanOps — Housekeeping Supervisor</title>
+<title>Handy sQuad — Housekeeping Supervisor</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg: #0a0c10;
@@ -39,14 +40,44 @@
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-  /* VIEWS */
-  .view { display: none; min-height: 100vh; padding-bottom: 90px; }
-  .view.active { display: block; }
+  /* ===========================
+     SPA VIEW SYSTEM — CRITICAL
+     Only one .view ever shows.
+     display:none on all, display:flex or block on .active only.
+  =========================== */
+  .view {
+    display: none !important;
+    min-height: 100vh;
+    padding-bottom: 90px;
+    flex-direction: column;
+  }
+  .view.active { display: flex !important; flex-direction: column; }
+
+  /* Login is a special flex centering layout */
+  #view-login.active {
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px 18px;
+    padding-bottom: 24px;
+    background: radial-gradient(ellipse at 30% 20%, rgba(59,130,246,0.1) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.07) 0%, transparent 50%);
+  }
+
+  /* All other views fill and scroll */
+  #view-dashboard.active,
+  #view-create-job.active,
+  #view-job-detail.active,
+  #view-room.active {
+    display: block !important;
+  }
 
   /* TOPBAR */
   .topbar {
     position: sticky; top: 0; z-index: 100;
-    background: rgba(10,12,16,0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    background: rgba(10,12,16,0.97); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
     border-bottom: 1px solid var(--border);
     padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
   }
@@ -58,7 +89,16 @@
     transition: all .2s; flex-shrink: 0;
   }
   .back-btn:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-  .topbar-brand { font-weight: 800; font-size: 1.25rem; color: var(--accent); letter-spacing: -0.5px; }
+
+  /* BRAND */
+  .brand-wrap { display: flex; align-items: center; gap: 8px; }
+  .brand-logo { width: 28px; height: 28px; border-radius: 7px; object-fit: contain; background: var(--accent-dim); }
+  .brand-name {
+    font-weight: 800; font-size: 1.15rem; color: var(--accent); letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .brand-name span { color: var(--text); }
+
   .topbar-title { font-weight: 700; font-size: 0.97rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar-sub { font-size: 0.67rem; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -70,13 +110,10 @@
   .logout-btn:hover { background: rgba(239,68,68,0.22); }
 
   /* LOGIN */
-  #view-login {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: 100vh; padding: 24px 18px;
-    background: radial-gradient(ellipse at 30% 20%, rgba(59,130,246,0.1) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.07) 0%, transparent 50%);
-  }
-  .login-logo { font-weight: 800; font-size: 2.4rem; letter-spacing: -1.5px; color: var(--accent); margin-bottom: 4px; text-shadow: 0 0 40px rgba(59,130,246,0.4); }
+  .login-logo-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .login-logo-img { width: 52px; height: 52px; border-radius: 14px; object-fit: contain; background: var(--accent-dim); border: 1px solid var(--border); padding: 4px; }
+  .login-logo-text { font-weight: 800; font-size: 2.2rem; letter-spacing: -1.5px; color: var(--accent); text-shadow: 0 0 40px rgba(59,130,246,0.4); line-height: 1; }
+  .login-logo-text span { color: var(--text); }
   .login-tagline { color: var(--muted); font-family: var(--font-mono); font-size: 0.68rem; margin-bottom: 36px; text-align: center; }
   .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 26px 20px; width: 100%; max-width: 400px; box-shadow: var(--shadow); }
   .login-card h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 20px; }
@@ -94,6 +131,7 @@
   .field select { cursor: pointer; }
   .field select option { background: #1a1f2e; }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
   /* BUTTONS */
   .btn {
@@ -122,7 +160,7 @@
   .error-msg.show { display: block; }
 
   /* CONTENT */
-  .content { padding: 16px; max-width: 800px; margin: 0 auto; }
+  .content { padding: 16px; max-width: 800px; margin: 0 auto; flex: 1; }
 
   /* CARDS */
   .card {
@@ -264,7 +302,6 @@
   .progress-fill.g { background: var(--green); }
   .progress-fill.y { background: var(--yellow); }
 
-  /* DIVIDER */
   hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 
   /* TOAST */
@@ -276,6 +313,15 @@
     box-shadow: var(--shadow);
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Kitchen count note */
+  .kitchen-note {
+    background: var(--yellow-dim); border: 1px solid rgba(245,158,11,0.3);
+    border-radius: var(--radius-xs); padding: 8px 11px;
+    font-family: var(--font-mono); font-size: 0.67rem; color: var(--yellow);
+    margin-bottom: 14px; display: none;
+  }
+  .kitchen-note.show { display: block; }
 
   /* DESKTOP */
   @media (min-width: 768px) {
@@ -291,9 +337,15 @@
 
 <div id="toast"></div>
 
-<!-- LOGIN -->
+<!-- ===================== LOGIN ===================== -->
 <div id="view-login" class="view active">
-  <div class="login-logo">CleanOps</div>
+  <div class="login-logo-wrap">
+    <img class="login-logo-img" id="login-logo-img"
+      src="https://lh3.googleusercontent.com/d/16qA-Ifw_PoX-iBO0kvBIEpm1KcRORP6-"
+      onerror="this.style.display='none'"
+      alt="Handy sQuad Logo">
+    <div class="login-logo-text">Handy <span>s</span>Quad</div>
+  </div>
   <div class="login-tagline">// HOUSEKEEPING SUPERVISOR SYSTEM</div>
   <div class="login-card">
     <h2>Sign In</h2>
@@ -304,10 +356,18 @@
   </div>
 </div>
 
-<!-- DASHBOARD -->
+<!-- ===================== DASHBOARD ===================== -->
 <div id="view-dashboard" class="view">
   <div class="topbar">
-    <div class="topbar-left"><span class="topbar-brand">CleanOps</span></div>
+    <div class="topbar-left">
+      <div class="brand-wrap">
+        <img class="brand-logo" id="dash-logo"
+          src="https://lh3.googleusercontent.com/d/16qA-Ifw_PoX-iBO0kvBIEpm1KcRORP6-"
+          onerror="this.style.display='none'"
+          alt="">
+        <span class="brand-name">Handy <span>s</span>Quad</span>
+      </div>
+    </div>
     <div class="topbar-right">
       <span style="font-family:var(--font-mono);font-size:0.6rem;color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="dash-user-email"></span>
       <button class="logout-btn" onclick="doLogout()">Logout</button>
@@ -335,15 +395,15 @@
   </div>
   <div class="fab-bar">
     <button class="btn btn-outline btn-sm" id="fab-add-worker" style="display:none;flex:0 0 auto;" onclick="openWorkerModal()">+ Worker</button>
-    <button class="btn btn-primary" id="fab-create-job" onclick="showView('view-create-job')">+ Create Job</button>
+    <button class="btn btn-primary" id="fab-create-job" onclick="navigate('view-create-job')">+ Create Job</button>
   </div>
 </div>
 
-<!-- CREATE JOB -->
+<!-- ===================== CREATE JOB ===================== -->
 <div id="view-create-job" class="view">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="showView('view-dashboard')">←</button>
+      <button class="back-btn" onclick="navigateBack()">←</button>
       <div><div class="topbar-title">New Job</div><div class="topbar-sub">Fill in site details</div></div>
     </div>
   </div>
@@ -365,7 +425,7 @@
       </div>
       <div class="field">
         <label>LAYOUT TYPE</label>
-        <select id="cj-layout">
+        <select id="cj-layout" onchange="onLayoutChange()">
           <option value="">Select</option>
           <option value="1BHK">1 BHK</option>
           <option value="2BHK">2 BHK</option>
@@ -377,19 +437,31 @@
         </select>
       </div>
     </div>
+    <!-- Kitchen count — shown when layout is selected and has kitchen -->
+    <div class="field" id="kitchen-count-field" style="display:none;">
+      <label>NUMBER OF KITCHENS</label>
+      <select id="cj-kitchens">
+        <option value="1">1 Kitchen (Standard)</option>
+        <option value="2">2 Kitchens</option>
+        <option value="3">3 Kitchens</option>
+      </select>
+    </div>
+    <div class="kitchen-note" id="kitchen-note">
+      🍳 Extra kitchens will be added as Kitchen 2, Kitchen 3, etc.
+    </div>
     <div class="error-msg" id="cj-error"></div>
   </div>
   <div class="fab-bar">
-    <button class="btn btn-outline" onclick="showView('view-dashboard')">Cancel</button>
+    <button class="btn btn-outline" onclick="navigateBack()">Cancel</button>
     <button class="btn btn-primary" id="cj-submit" onclick="createJob()">Create Job →</button>
   </div>
 </div>
 
-<!-- JOB DETAIL -->
+<!-- ===================== JOB DETAIL ===================== -->
 <div id="view-job-detail" class="view">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="showView('view-dashboard')">←</button>
+      <button class="back-btn" onclick="navigateBack()">←</button>
       <div style="min-width:0;">
         <div class="topbar-title" id="jd-title">Job</div>
         <div class="topbar-sub" id="jd-status-sub"></div>
@@ -420,15 +492,16 @@
     </div>
   </div>
   <div class="fab-bar">
+    <button class="btn btn-blue btn-sm" style="flex:0 0 auto;" onclick="downloadJobReport()">⬇ PDF Report</button>
     <button class="btn btn-danger" id="jd-finish-btn" onclick="finishJob()">✓ Finish Job</button>
   </div>
 </div>
 
-<!-- ROOM / TASKS -->
+<!-- ===================== ROOM / TASKS ===================== -->
 <div id="view-room" class="view">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="showView('view-job-detail')">←</button>
+      <button class="back-btn" onclick="navigateBack()">←</button>
       <div style="min-width:0;">
         <div class="topbar-title" id="room-title">Room</div>
         <div class="topbar-sub" id="room-job-name"></div>
@@ -452,7 +525,7 @@
   </div>
 </div>
 
-<!-- MODALS -->
+<!-- ===================== MODALS ===================== -->
 
 <!-- Worker Modal -->
 <div class="modal-overlay" id="worker-modal">
@@ -514,11 +587,12 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">🚪 Add Extra Room</div>
-    <p style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);margin-bottom:16px;">Add any room not included in the standard layout — store rooms, pooja rooms, balconies, etc.</p>
+    <p style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);margin-bottom:16px;">Add any room not in the standard layout — including extra kitchens, store rooms, balconies, etc.</p>
     <div class="field">
       <label>ROOM TYPE</label>
       <select id="er-preset" onchange="onRoomPresetChange()">
         <option value="">Choose a preset...</option>
+        <option value="Kitchen">🍳 Kitchen (Extra)</option>
         <option value="Store Room">📦 Store Room</option>
         <option value="Pooja Room">🪔 Pooja Room</option>
         <option value="Servant Room">🛏️ Servant Room</option>
@@ -569,9 +643,69 @@ const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // STATE
 let currentUser = null, currentJob = null, currentRoom = null;
 let currentTasks = [], allWorkers = [], delayTaskId = null;
-let taskCache = {}; // roomId -> tasks[] — persists across room visits
+let taskCache = {};
 
-// LAYOUTS
+// =========================================================
+// NAVIGATION STACK — fixes all stacking / back-button issues
+// =========================================================
+// The stack holds view IDs in order, e.g. ['view-dashboard','view-job-detail','view-room']
+// navigateBack() pops and shows the previous view.
+// History API pushState keeps the browser/phone back button in sync.
+let navStack = [];
+let _ignorePopState = false;
+
+function navigate(viewId) {
+  // Push a history entry so the browser back button fires popstate
+  history.pushState({ view: viewId }, '', '#' + viewId);
+  _showView(viewId);
+  navStack.push(viewId);
+  window.scrollTo(0, 0);
+}
+
+function navigateBack() {
+  if (navStack.length > 1) {
+    navStack.pop();
+    const prev = navStack[navStack.length - 1];
+    // Tell browser to go back (keeps URL in sync)
+    _ignorePopState = true;
+    history.back();
+    _showView(prev);
+    window.scrollTo(0, 0);
+  }
+}
+
+// Phone swipe-back / browser back button
+window.addEventListener('popstate', (e) => {
+  if (_ignorePopState) { _ignorePopState = false; return; }
+  // User swiped or pressed back on phone
+  if (navStack.length > 1) {
+    navStack.pop();
+    const prev = navStack[navStack.length - 1];
+    _showView(prev);
+    window.scrollTo(0, 0);
+  } else {
+    // Already at root — prevent going to a blank/previous URL
+    // Re-push so they can't navigate away from the app
+    history.pushState({ view: navStack[0] || 'view-login' }, '', '#' + (navStack[0] || 'view-login'));
+  }
+});
+
+// Internal: actually swap the visible view
+function _showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+// Close any open modal on back gesture if one is open
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const open = document.querySelector('.modal-overlay.open');
+    if (open) open.classList.remove('open');
+  }
+});
+
+// LAYOUTS with kitchen variants
 const LAYOUTS = {
   '1BHK': ['Living Room','Bedroom','Kitchen','Bathroom'],
   '2BHK': ['Living Room','Bedroom 1','Bedroom 2','Kitchen','Bathroom 1','Bathroom 2'],
@@ -581,6 +715,10 @@ const LAYOUTS = {
   'Villa': ['Living Room','Dining Room','Kitchen','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom 1','Bathroom 2','Terrace','Garden Area'],
   'Office': ['Reception','Conference Room','Manager Cabin','Open Work Area','Pantry','Washroom 1','Washroom 2']
 };
+
+// Layouts that include a kitchen
+const LAYOUTS_WITH_KITCHEN = new Set(['1BHK','2BHK','3BHK','4BHK','Studio','Villa']);
+
 const ROOM_ICONS = {
   'Living Room':'🛋️','Bedroom':'🛏️','Bedroom 1':'🛏️','Bedroom 2':'🛏️','Bedroom 3':'🛏️','Bedroom 4':'🛏️',
   'Kitchen':'🍳','Bathroom':'🚿','Bathroom 1':'🚿','Bathroom 2':'🚿','Bathroom 3':'🚿','Bathroom 4':'🚿',
@@ -594,9 +732,15 @@ const ROOM_ICONS = {
 
 // INIT
 (async () => {
+  // Seed navigation stack with login
+  navStack = ['view-login'];
+  history.replaceState({ view: 'view-login' }, '', '#view-login');
+
   const { data: { session } } = await db.auth.getSession();
   if (session?.user) { currentUser = session.user; enterApp(); }
-  db.auth.onAuthStateChange((_e, s) => { if (s?.user && !currentUser) { currentUser = s.user; enterApp(); } });
+  db.auth.onAuthStateChange((_e, s) => {
+    if (s?.user && !currentUser) { currentUser = s.user; enterApp(); }
+  });
 })();
 
 // AUTH
@@ -617,21 +761,22 @@ async function doLogin() {
 async function doLogout() {
   await db.auth.signOut();
   currentUser = null; currentJob = null; currentRoom = null; taskCache = {};
-  showView('view-login');
+  // Reset nav stack
+  navStack = ['view-login'];
+  history.replaceState({ view: 'view-login' }, '', '#view-login');
+  _showView('view-login');
+  window.scrollTo(0, 0);
 }
 
 function enterApp() {
   const e = currentUser.email || '';
-  document.getElementById('dash-user-email').textContent = e.length > 20 ? e.substring(0, 17) + '...' : e;
-  showView('view-dashboard');
-  loadJobs(); loadWorkers();
-}
-
-// VIEWS
-function showView(id) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  document.getElementById('dash-user-email').textContent = e.length > 20 ? e.substring(0,17)+'...' : e;
+  // Reset stack to dashboard
+  navStack = ['view-dashboard'];
+  history.replaceState({ view: 'view-dashboard' }, '', '#view-dashboard');
+  _showView('view-dashboard');
   window.scrollTo(0, 0);
+  loadJobs(); loadWorkers();
 }
 
 // TOAST
@@ -650,11 +795,11 @@ function clearErr(el) { el.classList.remove('show'); }
 // DASHBOARD TABS
 function switchDashTab(tab) {
   document.querySelectorAll('#dash-tabs .tab').forEach((t, i) =>
-    t.classList.toggle('active', (i === 0 && tab === 'jobs') || (i === 1 && tab === 'workers')));
-  document.getElementById('dash-jobs-tab').style.display = tab === 'jobs' ? '' : 'none';
-  document.getElementById('dash-workers-tab').style.display = tab === 'workers' ? '' : 'none';
-  document.getElementById('fab-create-job').style.display = tab === 'jobs' ? '' : 'none';
-  document.getElementById('fab-add-worker').style.display = tab === 'workers' ? '' : 'none';
+    t.classList.toggle('active', (i===0&&tab==='jobs')||(i===1&&tab==='workers')));
+  document.getElementById('dash-jobs-tab').style.display = tab==='jobs' ? '' : 'none';
+  document.getElementById('dash-workers-tab').style.display = tab==='workers' ? '' : 'none';
+  document.getElementById('fab-create-job').style.display = tab==='jobs' ? '' : 'none';
+  document.getElementById('fab-add-worker').style.display = tab==='workers' ? '' : 'none';
 }
 
 // JOBS
@@ -666,18 +811,18 @@ async function loadJobs() {
     document.getElementById('jobs-count').textContent = '0 jobs';
     return;
   }
-  document.getElementById('jobs-count').textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''}`;
+  document.getElementById('jobs-count').textContent = `${jobs.length} job${jobs.length!==1?'s':''}`;
   listEl.innerHTML = jobs.map(j => {
-    const cls = j.status === 'completed' ? 'green' : j.status === 'ongoing' ? 'yellow' : 'grey';
-    const b = j.status === 'completed' ? 'badge-green' : j.status === 'ongoing' ? 'badge-yellow' : 'badge-muted';
+    const cls = j.status==='completed'?'green':j.status==='ongoing'?'yellow':'grey';
+    const b = j.status==='completed'?'badge-green':j.status==='ongoing'?'badge-yellow':'badge-muted';
     return `
     <div class="card ${cls}" onclick="openJob('${j.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px;">
         <div class="card-title">${esc(j.customer_name)}</div>
         <span class="badge ${b}" style="flex-shrink:0;">${j.status}</span>
       </div>
-      <div class="card-meta">${esc(j.layout_type || '—')} &nbsp;·&nbsp; ${esc(j.site_type || '—')}</div>
-      <div class="card-meta">${esc(j.address || '—')}</div>
+      <div class="card-meta">${esc(j.layout_type||'—')} &nbsp;·&nbsp; ${esc(j.site_type||'—')}</div>
+      <div class="card-meta">${esc(j.address||'—')}</div>
       <div class="card-meta">${fmtDate(j.created_at)}</div>
     </div>`;
   }).join('');
@@ -687,27 +832,40 @@ async function openJob(jobId) {
   const { data: job } = await db.from('jobs').select('*').eq('id', jobId).single();
   currentJob = job;
   document.getElementById('jd-title').textContent = job.customer_name;
-  document.getElementById('jd-status-sub').textContent = `${job.layout_type || ''} · ${job.status}`;
+  document.getElementById('jd-status-sub').textContent = `${job.layout_type||''} · ${job.status}`;
   document.getElementById('jd-info').innerHTML = `
-    <div class="info-item"><div class="info-label">PHONE</div><div class="info-value">${esc(job.phone || '—')}</div></div>
-    <div class="info-item"><div class="info-label">SITE TYPE</div><div class="info-value">${esc(job.site_type || '—')}</div></div>
-    <div class="info-item"><div class="info-label">LAYOUT</div><div class="info-value">${esc(job.layout_type || '—')}</div></div>
+    <div class="info-item"><div class="info-label">PHONE</div><div class="info-value">${esc(job.phone||'—')}</div></div>
+    <div class="info-item"><div class="info-label">SITE TYPE</div><div class="info-value">${esc(job.site_type||'—')}</div></div>
+    <div class="info-item"><div class="info-label">LAYOUT</div><div class="info-value">${esc(job.layout_type||'—')}</div></div>
     <div class="info-item"><div class="info-label">STATUS</div><div class="info-value">${esc(job.status)}</div></div>
-    <div class="info-item" style="grid-column:1/-1;"><div class="info-label">ADDRESS</div><div class="info-value">${esc(job.address || '—')}</div></div>
+    <div class="info-item" style="grid-column:1/-1;"><div class="info-label">ADDRESS</div><div class="info-value">${esc(job.address||'—')}</div></div>
   `;
-  document.getElementById('jd-finish-btn').style.display = job.status === 'completed' ? 'none' : '';
+  document.getElementById('jd-finish-btn').style.display = job.status==='completed' ? 'none' : '';
   switchJobTab('rooms');
-  showView('view-job-detail');
+  navigate('view-job-detail');
   loadRooms(jobId);
   loadIssues(jobId);
 }
 
 // JOB TABS
 function switchJobTab(tab) {
-  document.querySelectorAll('#view-job-detail .tabs .tab').forEach((t, i) =>
-    t.classList.toggle('active', (i === 0 && tab === 'rooms') || (i === 1 && tab === 'issues')));
-  document.getElementById('jd-rooms-tab').style.display = tab === 'rooms' ? '' : 'none';
-  document.getElementById('jd-issues-tab').style.display = tab === 'issues' ? '' : 'none';
+  document.querySelectorAll('#view-job-detail .tabs .tab').forEach((t,i) =>
+    t.classList.toggle('active',(i===0&&tab==='rooms')||(i===1&&tab==='issues')));
+  document.getElementById('jd-rooms-tab').style.display = tab==='rooms' ? '' : 'none';
+  document.getElementById('jd-issues-tab').style.display = tab==='issues' ? '' : 'none';
+}
+
+// Kitchen count field toggle
+function onLayoutChange() {
+  const layout = document.getElementById('cj-layout').value;
+  const hasKitchen = LAYOUTS_WITH_KITCHEN.has(layout);
+  document.getElementById('kitchen-count-field').style.display = hasKitchen ? '' : 'none';
+  const note = document.getElementById('kitchen-note');
+  if (hasKitchen) {
+    note.classList.add('show');
+  } else {
+    note.classList.remove('show');
+  }
 }
 
 // CREATE JOB
@@ -717,6 +875,7 @@ async function createJob() {
   const address = document.getElementById('cj-address').value.trim();
   const siteType = document.getElementById('cj-site-type').value;
   const layout = document.getElementById('cj-layout').value;
+  const kitchens = parseInt(document.getElementById('cj-kitchens').value) || 1;
   const errEl = document.getElementById('cj-error'); clearErr(errEl);
   if (!name) { showErr(errEl, 'Customer name is required'); return; }
   const btn = document.getElementById('cj-submit');
@@ -725,16 +884,33 @@ async function createJob() {
     user_id: currentUser.id, customer_name: name, phone, address,
     site_type: siteType, layout_type: layout, status: 'ongoing'
   }).select().single();
-  if (error) { showErr(errEl, error.message); btn.disabled = false; btn.textContent = 'Create Job →'; return; }
+  if (error) { showErr(errEl, error.message); btn.disabled=false; btn.textContent='Create Job →'; return; }
+
   if (layout && LAYOUTS[layout]) {
-    await db.from('rooms').insert(LAYOUTS[layout].map(rn => ({ job_id: job.id, room_name: rn })));
+    let rooms = [...LAYOUTS[layout]];
+    // Add extra kitchens if needed
+    if (LAYOUTS_WITH_KITCHEN.has(layout) && kitchens > 1) {
+      for (let k = 2; k <= kitchens; k++) {
+        rooms.push(`Kitchen ${k}`);
+      }
+    }
+    await db.from('rooms').insert(rooms.map(rn => ({ job_id: job.id, room_name: rn })));
   }
-  btn.disabled = false; btn.textContent = 'Create Job →';
-  ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('cj-site-type').value = '';
-  document.getElementById('cj-layout').value = '';
+
+  btn.disabled=false; btn.textContent='Create Job →';
+  ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('cj-site-type').value='';
+  document.getElementById('cj-layout').value='';
+  document.getElementById('cj-kitchens').value='1';
+  document.getElementById('kitchen-count-field').style.display='none';
+  document.getElementById('kitchen-note').classList.remove('show');
   toast('✅ Job created successfully!');
-  showView('view-dashboard'); loadJobs();
+  // Go back to dashboard, not navigate forward
+  navStack = ['view-dashboard'];
+  history.replaceState({ view:'view-dashboard' },'','#view-dashboard');
+  _showView('view-dashboard');
+  window.scrollTo(0, 0);
+  loadJobs();
 }
 
 // ROOMS
@@ -745,22 +921,21 @@ async function loadRooms(jobId) {
     document.getElementById('jd-rooms-grid').innerHTML = `<div class="empty" style="grid-column:1/-1;"><div class="empty-icon">🚪</div>No rooms found</div>`;
     return;
   }
-  // Batch-fetch task counts
-  const { data: tasks } = await db.from('tasks').select('id,room_id,status').in('room_id', rooms.map(r => r.id));
+  const { data: tasks } = await db.from('tasks').select('id,room_id,status').in('room_id', rooms.map(r=>r.id));
   const tmap = {};
-  (tasks || []).forEach(t => {
-    if (!tmap[t.room_id]) tmap[t.room_id] = { total: 0, done: 0 };
+  (tasks||[]).forEach(t => {
+    if (!tmap[t.room_id]) tmap[t.room_id]={ total:0, done:0 };
     tmap[t.room_id].total++;
-    if (t.status === 'completed') tmap[t.room_id].done++;
+    if (t.status==='completed') tmap[t.room_id].done++;
   });
   const stdRooms = currentJob?.layout_type && LAYOUTS[currentJob.layout_type] ? LAYOUTS[currentJob.layout_type] : [];
   document.getElementById('jd-rooms-grid').innerHTML = rooms.map(r => {
-    const tm = tmap[r.id] || { total: 0, done: 0 };
-    const icon = ROOM_ICONS[r.room_name] || '🚪';
-    const allDone = tm.total > 0 && tm.done === tm.total;
+    const tm = tmap[r.id]||{ total:0, done:0 };
+    const icon = ROOM_ICONS[r.room_name]||'🚪';
+    const allDone = tm.total>0 && tm.done===tm.total;
     const isExtra = !stdRooms.includes(r.room_name);
     return `
-    <div class="room-card ${allDone ? 'done-room' : ''} ${isExtra ? 'extra-room' : ''}" onclick="openRoom('${r.id}','${esc(r.room_name)}')">
+    <div class="room-card ${allDone?'done-room':''} ${isExtra?'extra-room':''}" onclick="openRoom('${r.id}','${esc(r.room_name)}')">
       ${isExtra ? '<span class="room-extra-badge">EXTRA</span>' : ''}
       <div class="room-icon">${icon}</div>
       <div class="room-name">${esc(r.room_name)}</div>
@@ -772,23 +947,32 @@ async function loadRooms(jobId) {
 
 // EXTRA ROOM
 function openAddRoomModal() {
-  document.getElementById('er-preset').value = '';
-  document.getElementById('er-custom-name').value = '';
-  document.getElementById('er-custom-field').style.display = 'none';
+  document.getElementById('er-preset').value='';
+  document.getElementById('er-custom-name').value='';
+  document.getElementById('er-custom-field').style.display='none';
   document.getElementById('er-error').classList.remove('show');
   openModal('add-room-modal');
 }
 function onRoomPresetChange() {
   const v = document.getElementById('er-preset').value;
-  document.getElementById('er-custom-field').style.display = v === 'custom' ? '' : 'none';
+  document.getElementById('er-custom-field').style.display = v==='custom' ? '' : 'none';
 }
 async function addExtraRoom() {
   const preset = document.getElementById('er-preset').value;
   const customName = document.getElementById('er-custom-name').value.trim();
   const errEl = document.getElementById('er-error'); clearErr(errEl);
-  if (!preset) { showErr(errEl, 'Please select a room type'); return; }
-  const roomName = preset === 'custom' ? customName : preset;
-  if (!roomName) { showErr(errEl, 'Please enter a custom room name'); return; }
+  if (!preset) { showErr(errEl,'Please select a room type'); return; }
+  let roomName = preset==='custom' ? customName : preset;
+
+  // For Kitchen extra, auto-number to avoid duplicate
+  if (preset === 'Kitchen') {
+    // Count existing kitchens in current job
+    const { data: existing } = await db.from('rooms').select('room_name').eq('job_id', currentJob.id).like('room_name','Kitchen%');
+    const kitchenCount = (existing||[]).filter(r => /^Kitchen/.test(r.room_name)).length;
+    roomName = `Kitchen ${kitchenCount + 1}`;
+  }
+
+  if (!roomName) { showErr(errEl,'Please enter a custom room name'); return; }
   const { error } = await db.from('rooms').insert({ job_id: currentJob.id, room_name: roomName });
   if (error) { showErr(errEl, error.message); return; }
   closeModal('add-room-modal');
@@ -796,13 +980,12 @@ async function addExtraRoom() {
   await loadRooms(currentJob.id);
 }
 
-// OPEN ROOM (with task cache)
+// OPEN ROOM
 async function openRoom(roomId, roomName) {
   currentRoom = { id: roomId, name: roomName };
   document.getElementById('room-title').textContent = roomName;
   document.getElementById('room-job-name').textContent = currentJob?.customer_name || '';
-  showView('view-room');
-  // Use cached tasks if available — no extra API call
+  navigate('view-room');
   if (taskCache[roomId]) {
     currentTasks = taskCache[roomId];
     renderTasks(); renderRoomStats();
@@ -823,11 +1006,11 @@ async function loadTasks(roomId) {
 
 function renderRoomStats() {
   const total = currentTasks.length;
-  const done = currentTasks.filter(t => t.status === 'completed').length;
-  const inProg = currentTasks.filter(t => t.status === 'in_progress').length;
-  const delayed = currentTasks.filter(t => t.status === 'delayed').length;
-  const pending = currentTasks.filter(t => t.status === 'not_started').length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const done = currentTasks.filter(t=>t.status==='completed').length;
+  const inProg = currentTasks.filter(t=>t.status==='in_progress').length;
+  const delayed = currentTasks.filter(t=>t.status==='delayed').length;
+  const pending = currentTasks.filter(t=>t.status==='not_started').length;
+  const pct = total>0 ? Math.round((done/total)*100) : 0;
   document.getElementById('room-stats').innerHTML = `
     <div class="stat-box"><div class="stat-num" style="color:var(--green)">${done}</div><div class="stat-label">DONE</div></div>
     <div class="stat-box"><div class="stat-num" style="color:var(--yellow)">${inProg}</div><div class="stat-label">ACTIVE</div></div>
@@ -837,7 +1020,7 @@ function renderRoomStats() {
   document.getElementById('room-pct').textContent = `${pct}%`;
   const fill = document.getElementById('room-fill');
   fill.style.width = `${pct}%`;
-  fill.className = `progress-fill ${pct === 100 ? 'g' : pct > 50 ? '' : 'y'}`;
+  fill.className = `progress-fill ${pct===100?'g':pct>50?'':'y'}`;
 }
 
 function renderTasks() {
@@ -856,18 +1039,17 @@ function taskCard(t) {
     'completed':'<span class="badge badge-green">✓ DONE</span>',
     'delayed':'<span class="badge badge-red">⚠ DELAYED</span>',
   };
-  const workerName = t.workers?.name ? `👤 ${t.workers.name}${t.workers.role ? ` (${t.workers.role})` : ''}` : '👤 Unassigned';
+  const workerName = t.workers?.name ? `👤 ${t.workers.name}${t.workers.role?` (${t.workers.role})`:''}` : '👤 Unassigned';
   let actions = '';
-  if (t.status === 'not_started') actions = `<button class="btn btn-yellow btn-sm" onclick="startTask('${t.id}')">▶ Start</button>`;
-  else if (t.status === 'in_progress') actions = `<button class="btn btn-green btn-sm" onclick="completeTask('${t.id}')">✓ Complete</button>`;
+  if (t.status==='not_started') actions = `<button class="btn btn-yellow btn-sm" onclick="startTask('${t.id}')">▶ Start</button>`;
+  else if (t.status==='in_progress') actions = `<button class="btn btn-green btn-sm" onclick="completeTask('${t.id}')">✓ Complete</button>`;
   const timeBadges = [
     t.estimated_time ? `<span class="badge badge-muted">⏱ Est ${t.estimated_time}m</span>` : '',
     t.actual_time ? `<span class="badge badge-blue">⏱ Actual ${t.actual_time}m</span>` : '',
     t.difficulty ? `<span class="badge badge-muted">${t.difficulty}</span>` : '',
   ].filter(Boolean).join('');
-  const delayBlock = (t.status === 'delayed' && t.delay_reason)
+  const delayBlock = (t.status==='delayed'&&t.delay_reason)
     ? `<div class="delay-block"><div class="delay-block-label">DELAY REASON</div><div class="delay-block-text">${esc(t.delay_reason)}</div></div>` : '';
-
   return `
   <div class="task-card s-${t.status}">
     <div class="task-top">
@@ -875,7 +1057,7 @@ function taskCard(t) {
         <div class="task-name">${esc(t.task_name)}</div>
         <div class="task-worker">${workerName}</div>
       </div>
-      <div style="flex-shrink:0;">${badges[t.status] || ''}</div>
+      <div style="flex-shrink:0;">${badges[t.status]||''}</div>
     </div>
     ${timeBadges ? `<div class="task-meta">${timeBadges}</div>` : ''}
     ${delayBlock}
@@ -884,22 +1066,33 @@ function taskCard(t) {
 }
 
 async function startTask(taskId) {
-  await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
+  await db.from('tasks').update({ status:'in_progress', started_at:new Date().toISOString() }).eq('id', taskId);
   delete taskCache[currentRoom.id];
   await loadTasks(currentRoom.id);
   toast('▶ Task started!', 'var(--yellow)');
 }
 
 async function completeTask(taskId) {
-  const task = currentTasks.find(t => t.id === taskId);
+  const task = currentTasks.find(t=>t.id===taskId);
   const now = new Date();
+  // Use actual started_at from DB; if missing, treat as started now (0 elapsed)
   const startedAt = task.started_at ? new Date(task.started_at) : now;
-  const actualMinutes = Math.max(1, Math.round((now - startedAt) / 60000));
-  const isDelayed = task.estimated_time && actualMinutes > task.estimated_time;
-  await db.from('tasks').update({ status: isDelayed ? 'delayed' : 'completed', completed_at: now.toISOString(), actual_time: actualMinutes }).eq('id', taskId);
+  const elapsedMs = Math.max(0, now - startedAt);
+  // Store actual time in minutes, floored (not rounded/maxed) so 59s = 0min, 61s = 1min
+  // This prevents a 30-second task from being counted as "1 minute" and triggering delay
+  const actualMinutes = Math.floor(elapsedMs / 60000);
+  // Only flag as delayed if actual time STRICTLY exceeds estimate by more than 1 minute
+  // This gives a 1-minute grace buffer so minor overruns don't penalise workers
+  const isDelayed = task.estimated_time != null
+    && actualMinutes > task.estimated_time + 1;
+  await db.from('tasks').update({
+    status: isDelayed ? 'delayed' : 'completed',
+    completed_at: now.toISOString(),
+    actual_time: actualMinutes
+  }).eq('id', taskId);
   delete taskCache[currentRoom.id];
-  if (isDelayed) { delayTaskId = taskId; openModal('delay-modal'); }
-  else { await loadTasks(currentRoom.id); toast('✅ Task completed!', 'var(--green)'); }
+  if (isDelayed) { delayTaskId=taskId; openModal('delay-modal'); }
+  else { await loadTasks(currentRoom.id); toast('✅ Task completed!','var(--green)'); }
 }
 
 async function submitDelay(withReason) {
@@ -907,21 +1100,21 @@ async function submitDelay(withReason) {
     const reason = document.getElementById('delay-reason-input').value.trim();
     await db.from('tasks').update({ delay_reason: reason }).eq('id', delayTaskId);
   }
-  document.getElementById('delay-reason-input').value = '';
-  delayTaskId = null;
+  document.getElementById('delay-reason-input').value='';
+  delayTaskId=null;
   closeModal('delay-modal');
   delete taskCache[currentRoom.id];
   await loadTasks(currentRoom.id);
-  toast('⚠️ Marked as delayed', 'var(--red)');
+  toast('⚠️ Marked as delayed','var(--red)');
 }
 
 // ADD TASK
 async function openAddTaskModal() {
   const sel = document.getElementById('t-worker');
   sel.innerHTML = '<option value="">Unassigned</option>' +
-    allWorkers.map(w => `<option value="${w.id}">${esc(w.name)}${w.role ? ` (${esc(w.role)})` : ''}</option>`).join('');
-  ['t-name','t-est-time'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('t-diff').value = '';
+    allWorkers.map(w=>`<option value="${w.id}">${esc(w.name)}${w.role?` (${esc(w.role)})`:''}</option>`).join('');
+  ['t-name','t-est-time'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('t-diff').value='';
   document.getElementById('t-error').classList.remove('show');
   openModal('task-modal');
 }
@@ -932,8 +1125,8 @@ async function addTask() {
   const estTime = parseInt(document.getElementById('t-est-time').value) || null;
   const diff = document.getElementById('t-diff').value || null;
   const errEl = document.getElementById('t-error');
-  if (!name) { showErr(errEl, 'Task name is required'); return; }
-  const { error } = await db.from('tasks').insert({ room_id: currentRoom.id, task_name: name, assigned_worker_id: workerId, estimated_time: estTime, difficulty: diff, status: 'not_started' });
+  if (!name) { showErr(errEl,'Task name is required'); return; }
+  const { error } = await db.from('tasks').insert({ room_id:currentRoom.id, task_name:name, assigned_worker_id:workerId, estimated_time:estTime, difficulty:diff, status:'not_started' });
   if (error) { showErr(errEl, error.message); return; }
   closeModal('task-modal');
   delete taskCache[currentRoom.id];
@@ -943,25 +1136,25 @@ async function addTask() {
 
 // WORKERS
 async function loadWorkers() {
-  const { data: workers } = await db.from('workers').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
-  allWorkers = workers || [];
+  const { data: workers } = await db.from('workers').select('*').eq('user_id', currentUser.id).order('created_at',{ascending:false});
+  allWorkers = workers||[];
   const listEl = document.getElementById('workers-list');
-  document.getElementById('workers-count').textContent = `${allWorkers.length} worker${allWorkers.length !== 1 ? 's' : ''}`;
-  if (!allWorkers.length) { listEl.innerHTML = `<div class="empty"><div class="empty-icon">👷</div>No workers yet.<br>Add your team!</div>`; return; }
-  listEl.innerHTML = allWorkers.map(w => `
+  document.getElementById('workers-count').textContent = `${allWorkers.length} worker${allWorkers.length!==1?'s':''}`;
+  if (!allWorkers.length) { listEl.innerHTML=`<div class="empty"><div class="empty-icon">👷</div>No workers yet.<br>Add your team!</div>`; return; }
+  listEl.innerHTML = allWorkers.map(w=>`
     <div class="worker-card">
       <div class="worker-avatar">${w.name.charAt(0).toUpperCase()}</div>
       <div class="worker-info">
         <div class="worker-name">${esc(w.name)}</div>
-        <div class="worker-role">${esc(w.role || 'No role')} · ${esc(w.phone || '—')}</div>
+        <div class="worker-role">${esc(w.role||'No role')} · ${esc(w.phone||'—')}</div>
       </div>
-      <span class="badge badge-blue">${esc(w.role || 'Staff')}</span>
+      <span class="badge badge-blue">${esc(w.role||'Staff')}</span>
     </div>`).join('');
 }
 
 function openWorkerModal() {
-  ['w-name','w-phone'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('w-role').value = '';
+  ['w-name','w-phone'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('w-role').value='';
   document.getElementById('w-error').classList.remove('show');
   openModal('worker-modal');
 }
@@ -971,8 +1164,8 @@ async function addWorker() {
   const phone = document.getElementById('w-phone').value.trim();
   const role = document.getElementById('w-role').value;
   const errEl = document.getElementById('w-error');
-  if (!name) { showErr(errEl, 'Worker name is required'); return; }
-  const { error } = await db.from('workers').insert({ user_id: currentUser.id, name, phone, role });
+  if (!name) { showErr(errEl,'Worker name is required'); return; }
+  const { error } = await db.from('workers').insert({ user_id:currentUser.id, name, phone, role });
   if (error) { showErr(errEl, error.message); return; }
   closeModal('worker-modal');
   toast('👷 Worker added!'); await loadWorkers();
@@ -980,22 +1173,22 @@ async function addWorker() {
 
 // ISSUES
 async function loadIssues(jobId) {
-  const { data: issues } = await db.from('issues').select('*').eq('job_id', jobId).order('created_at', { ascending: false });
+  const { data: issues } = await db.from('issues').select('*').eq('job_id', jobId).order('created_at',{ascending:false});
   const listEl = document.getElementById('jd-issues-list');
-  if (!issues?.length) { listEl.innerHTML = `<div class="empty" style="padding:16px 0;"><div class="empty-icon" style="font-size:1.4rem;">✅</div>No issues logged</div>`; return; }
-  listEl.innerHTML = issues.map(i => `
+  if (!issues?.length) { listEl.innerHTML=`<div class="empty" style="padding:16px 0;"><div class="empty-icon" style="font-size:1.4rem;">✅</div>No issues logged</div>`; return; }
+  listEl.innerHTML = issues.map(i=>`
     <div class="issue-card">
-      <div class="issue-desc">${esc(i.description || '—')}</div>
+      <div class="issue-desc">${esc(i.description||'—')}</div>
       <div class="issue-time">${fmtDate(i.created_at)}</div>
     </div>`).join('');
 }
 
 async function addIssue() {
   const desc = document.getElementById('issue-desc').value.trim();
-  if (!desc || !currentJob) return;
-  await db.from('issues').insert({ job_id: currentJob.id, description: desc });
-  document.getElementById('issue-desc').value = '';
-  toast('⚠️ Issue logged', 'var(--yellow)');
+  if (!desc||!currentJob) return;
+  await db.from('issues').insert({ job_id:currentJob.id, description:desc });
+  document.getElementById('issue-desc').value='';
+  toast('⚠️ Issue logged','var(--yellow)');
   await loadIssues(currentJob.id);
 }
 
@@ -1003,23 +1196,329 @@ async function addIssue() {
 async function finishJob() {
   if (!currentJob) return;
   if (!confirm(`Mark job for "${currentJob.customer_name}" as completed?`)) return;
-  await db.from('jobs').update({ status: 'completed', site_out_time: new Date().toISOString() }).eq('id', currentJob.id);
-  await db.from('customer_verifications').insert({ job_id: currentJob.id, verified: true, verified_at: new Date().toISOString() });
-  currentJob.status = 'completed';
-  document.getElementById('jd-finish-btn').style.display = 'none';
-  toast('✅ Job completed & verified!', 'var(--green)');
-  setTimeout(() => { showView('view-dashboard'); loadJobs(); }, 1200);
+  await db.from('jobs').update({ status:'completed', site_out_time:new Date().toISOString() }).eq('id', currentJob.id);
+  await db.from('customer_verifications').insert({ job_id:currentJob.id, verified:true, verified_at:new Date().toISOString() });
+  currentJob.status='completed';
+  document.getElementById('jd-finish-btn').style.display='none';
+  toast('✅ Job completed & verified!','var(--green)');
+  setTimeout(() => {
+    navStack = ['view-dashboard'];
+    history.replaceState({ view:'view-dashboard' },'','#view-dashboard');
+    _showView('view-dashboard');
+    window.scrollTo(0, 0);
+    loadJobs();
+  }, 1200);
 }
 
 // MODALS
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal-overlay').forEach(m =>
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+  m.addEventListener('click', e => { if (e.target===m) m.classList.remove('open'); }));
 
 // UTILS
-function esc(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function fmtDate(iso) { if (!iso) return '—'; return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+function esc(s) { if(!s)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtDate(iso) { if(!iso)return'—'; return new Date(iso).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+function fmtDateShort(iso) { if(!iso)return'—'; return new Date(iso).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtTime(iso) { if(!iso)return'—'; return new Date(iso).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}); }
+
+// ===================== PDF REPORT =====================
+async function downloadJobReport() {
+  if (!currentJob) return;
+  toast('📄 Generating report...', 'var(--purple)');
+
+  // Fetch all rooms and tasks for this job
+  const { data: rooms } = await db.from('rooms').select('*').eq('job_id', currentJob.id).order('created_at');
+  const { data: issues } = await db.from('issues').select('*').eq('job_id', currentJob.id).order('created_at');
+  const { data: allTasks } = await db.from('tasks')
+    .select('*, workers(name, role)')
+    .in('room_id', (rooms||[]).map(r=>r.id));
+
+  // Group tasks by room
+  const tasksByRoom = {};
+  (allTasks||[]).forEach(t => {
+    if (!tasksByRoom[t.room_id]) tasksByRoom[t.room_id] = [];
+    tasksByRoom[t.room_id].push(t);
+  });
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const W = 210, margin = 16;
+  const col = W - margin*2;
+  let y = 0;
+
+  // ---- COLOURS ----
+  const C = {
+    bg:      [10, 12, 16],
+    surface: [18, 22, 32],
+    accent:  [59,130,246],
+    green:   [34,197,94],
+    yellow:  [245,158,11],
+    red:     [239,68,68],
+    purple:  [168,85,247],
+    text:    [238,240,246],
+    muted:   [122,133,168],
+    border:  [37,45,64],
+    white:   [255,255,255],
+  };
+
+  // Helper: filled rect
+  function fillRect(x,ry,w,h,color) { doc.setFillColor(...color); doc.rect(x,ry,w,h,'F'); }
+  // Helper: text
+  function txt(str, x, ry, size, color, align='left', style='normal') {
+    doc.setFontSize(size); doc.setTextColor(...color); doc.setFont('helvetica', style);
+    doc.text(String(str||''), x, ry, { align });
+  }
+  // Helper: line
+  function hLine(ry, color) { doc.setDrawColor(...color); doc.setLineWidth(0.3); doc.line(margin, ry, W-margin, ry); }
+  // Helper: badge pill
+  function badge(label, x, ry, bgColor, textColor) {
+    const pw = doc.getStringUnitWidth(label)*3.2+6;
+    doc.setFillColor(...bgColor); doc.roundedRect(x, ry-3.2, pw, 5, 1.5, 1.5, 'F');
+    doc.setFontSize(6.5); doc.setTextColor(...textColor); doc.setFont('helvetica','bold');
+    doc.text(label, x+3, ry+0.2);
+    return pw;
+  }
+
+  // ---- PAGE BACKGROUND ----
+  function drawPageBg() {
+    fillRect(0,0,W,297,C.bg);
+    // top accent strip
+    fillRect(0,0,W,1.5,C.accent);
+  }
+
+  // ---- HEADER ----
+  function drawHeader() {
+    drawPageBg();
+    // Brand bar
+    fillRect(0,1.5,W,28,C.surface);
+    // Logo placeholder circle
+    doc.setFillColor(...C.accent);
+    doc.circle(margin+7, 15.5, 7, 'F');
+    doc.setFontSize(8); doc.setTextColor(...C.white); doc.setFont('helvetica','bold');
+    doc.text('HS', margin+7, 17.2, {align:'center'});
+    // Brand name
+    txt('Handy sQuad', margin+18, 13, 13, C.accent, 'left', 'bold');
+    txt('HOUSEKEEPING SUPERVISOR SYSTEM', margin+18, 18.5, 6.5, C.muted, 'left', 'normal');
+    // Report label right
+    txt('JOB REPORT', W-margin, 13, 9, C.text, 'right', 'bold');
+    txt(fmtDateShort(new Date().toISOString()), W-margin, 18.5, 6.5, C.muted, 'right', 'normal');
+    // Divider
+    hLine(29.5, C.border);
+    y = 36;
+  }
+
+  // ---- JOB INFO SECTION ----
+  function drawJobInfo() {
+    txt('JOB DETAILS', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
+    hLine(y, C.border); y += 4;
+
+    const half = col/2;
+    const fields = [
+      ['CUSTOMER', currentJob.customer_name],
+      ['PHONE', currentJob.phone||'—'],
+      ['SITE TYPE', currentJob.site_type||'—'],
+      ['LAYOUT', currentJob.layout_type||'—'],
+      ['STATUS', (currentJob.status||'').toUpperCase()],
+      ['ADDRESS', currentJob.address||'—'],
+      ['SITE IN', fmtTime(currentJob.site_in_time)],
+      ['SITE OUT', fmtTime(currentJob.site_out_time)],
+    ];
+
+    let row = 0;
+    fields.forEach(([label, val], i) => {
+      const isFullWidth = (label==='ADDRESS');
+      const x = isFullWidth || (i%2===0) ? margin : margin + half + 4;
+      const boxW = isFullWidth ? col : half - 2;
+      // Box
+      fillRect(x, y, boxW, 11, C.surface);
+      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(x, y, boxW, 11, 'S');
+      txt(label, x+3, y+4, 5.5, C.muted, 'left', 'normal');
+      txt(val, x+3, y+9, 7, C.text, 'left', 'bold');
+      if (isFullWidth || i%2===1) { y += 13; }
+    });
+    y += 6;
+  }
+
+  // ---- SUMMARY STATS ----
+  function drawSummaryStats(rooms, allTasks) {
+    const total = allTasks.length;
+    const done = allTasks.filter(t=>t.status==='completed').length;
+    const delayed = allTasks.filter(t=>t.status==='delayed').length;
+    const inProg = allTasks.filter(t=>t.status==='in_progress'||t.status==='not_started').length;
+    const pct = total>0 ? Math.round(done/total*100) : 0;
+    const totalEst = allTasks.reduce((s,t)=>s+(t.estimated_time||0),0);
+    const totalAct = allTasks.reduce((s,t)=>s+(t.actual_time||0),0);
+
+    txt('SUMMARY', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
+    hLine(y, C.border); y += 4;
+
+    const boxes = [
+      { label:'ROOMS', val:rooms.length, color:C.accent },
+      { label:'TASKS DONE', val:`${done}/${total}`, color:C.green },
+      { label:'DELAYED', val:delayed, color:C.red },
+      { label:'COMPLETION', val:`${pct}%`, color: pct===100?C.green:pct>50?C.yellow:C.red },
+    ];
+    const bw = col/4;
+    boxes.forEach((b,i) => {
+      const x = margin + i*bw;
+      fillRect(x+1, y, bw-2, 16, C.surface);
+      doc.setDrawColor(...b.color); doc.setLineWidth(0.5); doc.rect(x+1, y, bw-2, 16, 'S');
+      txt(b.val, x+bw/2, y+9, 12, b.color, 'center', 'bold');
+      txt(b.label, x+bw/2, y+14, 5, C.muted, 'center', 'normal');
+    });
+    y += 20;
+
+    // Time summary
+    if (totalEst > 0 || totalAct > 0) {
+      const tw = col/2;
+      fillRect(margin, y, tw-2, 11, C.surface);
+      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(margin, y, tw-2, 11, 'S');
+      txt('TOTAL ESTIMATED', margin+3, y+4, 5.5, C.muted);
+      txt(`${totalEst} min`, margin+3, y+9, 7.5, C.accent, 'left', 'bold');
+
+      fillRect(margin+tw+2, y, tw-2, 11, C.surface);
+      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(margin+tw+2, y, tw-2, 11, 'S');
+      txt('TOTAL ACTUAL', margin+tw+5, y+4, 5.5, C.muted);
+      const actColor = totalAct > totalEst+2 ? C.red : C.green;
+      txt(`${totalAct} min`, margin+tw+5, y+9, 7.5, actColor, 'left', 'bold');
+      y += 15;
+    }
+    y += 4;
+  }
+
+  // ---- ROOMS & TASKS ----
+  function ensureSpace(needed) {
+    if (y + needed > 282) {
+      doc.addPage();
+      drawPageBg();
+      y = 20;
+    }
+  }
+
+  function drawRoomsAndTasks(rooms, tasksByRoom) {
+    txt('ROOMS & TASKS', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
+    hLine(y, C.border); y += 5;
+
+    (rooms||[]).forEach(room => {
+      const tasks = tasksByRoom[room.id] || [];
+      const done = tasks.filter(t=>t.status==='completed').length;
+      const allDone = tasks.length>0 && done===tasks.length;
+
+      ensureSpace(14 + tasks.length*14);
+
+      // Room header
+      fillRect(margin, y, col, 10, C.surface);
+      doc.setDrawColor(...(allDone?C.green:C.accent)); doc.setLineWidth(0.5);
+      doc.rect(margin, y, col, 10, 'S');
+      // left accent bar
+      fillRect(margin, y, 2.5, 10, allDone?C.green:C.accent);
+      txt((ROOM_ICONS[room.room_name]||''), margin+6, y+7, 9, C.text, 'left', 'normal');
+      txt(room.room_name, margin+14, y+7, 8, C.text, 'left', 'bold');
+      txt(`${done}/${tasks.length} tasks done`, W-margin-2, y+7, 6.5, allDone?C.green:C.muted, 'right', 'normal');
+      y += 12;
+
+      if (!tasks.length) {
+        txt('  No tasks assigned', margin+6, y+4, 6.5, C.muted);
+        y += 8;
+      } else {
+        tasks.forEach(t => {
+          ensureSpace(12);
+          const statusColors = {
+            'completed':   [C.green,   'DONE'],
+            'in_progress': [C.yellow,  'IN PROGRESS'],
+            'delayed':     [C.red,     'DELAYED'],
+            'not_started': [C.muted,   'PENDING'],
+          };
+          const [sColor, sLabel] = statusColors[t.status]||[C.muted,'—'];
+
+          fillRect(margin+3, y, col-3, 11, [14,18,28]);
+          doc.setDrawColor(...C.border); doc.setLineWidth(0.15); doc.rect(margin+3, y, col-3, 11, 'S');
+          // status left bar
+          fillRect(margin+3, y, 1.5, 11, sColor);
+
+          txt(t.task_name, margin+8, y+4.5, 7, C.text, 'left', 'bold');
+          // worker
+          const wName = t.workers?.name ? `👤 ${t.workers.name}` : '👤 Unassigned';
+          txt(wName, margin+8, y+9, 5.5, C.muted);
+
+          // right: status badge + times
+          let bx = W - margin - 2;
+          badge(sLabel, bx - (doc.getStringUnitWidth(sLabel)*3.2+9), y+5, sColor.map(v=>Math.min(255,v+180>255?v:v+40)), sColor);
+
+          // time info below task name
+          const timeStr = [
+            t.estimated_time != null ? `Est: ${t.estimated_time}m` : '',
+            t.actual_time != null    ? `Actual: ${t.actual_time}m` : '',
+            t.difficulty             ? `[${t.difficulty}]` : '',
+          ].filter(Boolean).join('  ');
+          if (timeStr) txt(timeStr, margin+8, y+9, 5.5, C.muted);
+
+          y += 13;
+        });
+      }
+
+      // Delay reasons
+      const delayed = tasks.filter(t=>t.status==='delayed'&&t.delay_reason);
+      delayed.forEach(t => {
+        ensureSpace(10);
+        fillRect(margin+3, y, col-3, 9, [30,10,10]);
+        doc.setDrawColor(...C.red); doc.setLineWidth(0.2); doc.rect(margin+3, y, col-3, 9, 'S');
+        txt('⚠ DELAY — ' + t.task_name + ': ' + (t.delay_reason||''), margin+6, y+5.5, 6, C.red);
+        y += 11;
+      });
+
+      y += 3;
+    });
+  }
+
+  // ---- ISSUES ----
+  function drawIssues(issues) {
+    if (!issues?.length) return;
+    ensureSpace(20);
+    txt('ISSUES LOGGED', margin, y, 7.5, C.red, 'left', 'bold'); y += 5;
+    hLine(y, C.red); y += 5;
+    issues.forEach(issue => {
+      ensureSpace(12);
+      fillRect(margin, y, col, 10, [25,10,10]);
+      doc.setDrawColor(...C.red); doc.setLineWidth(0.2); doc.rect(margin, y, col, 10, 'S');
+      txt('⚠', margin+3, y+7, 8, C.red);
+      txt(issue.description||'', margin+10, y+4.5, 6.5, C.text);
+      txt(fmtDate(issue.created_at), W-margin-2, y+7.5, 5.5, C.muted, 'right');
+      y += 12;
+    });
+    y += 4;
+  }
+
+  // ---- FOOTER ----
+  function drawFooter(pageNum, pageTotal) {
+    fillRect(0, 285, W, 12, C.surface);
+    hLine(285, C.border);
+    txt('Handy sQuad · Housekeeping Report', margin, 292, 6, C.muted, 'left', 'normal');
+    txt(`Generated: ${fmtDate(new Date().toISOString())}`, W/2, 292, 6, C.muted, 'center', 'normal');
+    txt(`Page ${pageNum} of ${pageTotal}`, W-margin, 292, 6, C.muted, 'right', 'normal');
+  }
+
+  // ---- BUILD PDF ----
+  drawHeader();
+  drawJobInfo();
+  drawSummaryStats(rooms||[], allTasks||[]);
+  drawRoomsAndTasks(rooms||[], tasksByRoom);
+  drawIssues(issues||[]);
+
+  // Add footers to all pages
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    drawFooter(p, totalPages);
+  }
+
+  // Save
+  const fname = `HandySquad_${(currentJob.customer_name||'Job').replace(/\s+/g,'_')}_${fmtDateShort(new Date().toISOString()).replace(/ /g,'-')}.pdf`;
+  doc.save(fname);
+  toast('✅ Report downloaded!', 'var(--green)');
+}
+// ===================== END PDF =====================
 </script>
 </body>
 </html>
