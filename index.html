@@ -437,7 +437,7 @@
         </select>
       </div>
     </div>
-    <!-- Kitchen count — shown when layout is selected and has kitchen -->
+    <!-- Kitchen count -->
     <div class="field" id="kitchen-count-field" style="display:none;">
       <label>NUMBER OF KITCHENS</label>
       <select id="cj-kitchens">
@@ -446,8 +446,25 @@
         <option value="3">3 Kitchens</option>
       </select>
     </div>
-    <div class="kitchen-note" id="kitchen-note">
-      🍳 Extra kitchens will be added as Kitchen 2, Kitchen 3, etc.
+    <div class="kitchen-note" id="kitchen-note">🍳 Extra kitchens will be added as Kitchen 2, Kitchen 3, etc.</div>
+    <hr>
+    <!-- Time tracking section -->
+    <div style="margin-bottom:10px;">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--muted);font-family:var(--font-mono);letter-spacing:0.06em;margin-bottom:10px;">⏱ TIME TRACKING</div>
+      <div class="form-row">
+        <div class="field">
+          <label>SITE ARRIVAL TIME</label>
+          <input type="time" id="cj-site-in" />
+        </div>
+        <div class="field">
+          <label>WORK STARTED TIME</label>
+          <input type="time" id="cj-work-start" />
+        </div>
+      </div>
+      <div class="field" style="max-width:50%;">
+        <label>WORK ENDED TIME</label>
+        <input type="time" id="cj-work-end" />
+      </div>
     </div>
     <div class="error-msg" id="cj-error"></div>
   </div>
@@ -878,34 +895,44 @@ async function createJob() {
   const kitchens = parseInt(document.getElementById('cj-kitchens').value) || 1;
   const errEl = document.getElementById('cj-error'); clearErr(errEl);
   if (!name) { showErr(errEl, 'Customer name is required'); return; }
+
+  // Build datetime strings from today + chosen time
+  function buildDT(timeVal) {
+    if (!timeVal) return null;
+    const today = new Date().toISOString().slice(0,10);
+    return new Date(`${today}T${timeVal}:00`).toISOString();
+  }
+  const siteInTime   = buildDT(document.getElementById('cj-site-in').value);
+  const workStart    = buildDT(document.getElementById('cj-work-start').value);
+  const workEnd      = buildDT(document.getElementById('cj-work-end').value);
+
   const btn = document.getElementById('cj-submit');
   btn.disabled = true; btn.textContent = 'Creating...';
   const { data: job, error } = await db.from('jobs').insert({
     user_id: currentUser.id, customer_name: name, phone, address,
-    site_type: siteType, layout_type: layout, status: 'ongoing'
+    site_type: siteType, layout_type: layout, status: 'ongoing',
+    site_in_time:   siteInTime,
+    work_start_time: workStart,
+    site_out_time:  workEnd,
   }).select().single();
   if (error) { showErr(errEl, error.message); btn.disabled=false; btn.textContent='Create Job →'; return; }
 
   if (layout && LAYOUTS[layout]) {
     let rooms = [...LAYOUTS[layout]];
-    // Add extra kitchens if needed
     if (LAYOUTS_WITH_KITCHEN.has(layout) && kitchens > 1) {
-      for (let k = 2; k <= kitchens; k++) {
-        rooms.push(`Kitchen ${k}`);
-      }
+      for (let k = 2; k <= kitchens; k++) rooms.push(`Kitchen ${k}`);
     }
     await db.from('rooms').insert(rooms.map(rn => ({ job_id: job.id, room_name: rn })));
   }
 
   btn.disabled=false; btn.textContent='Create Job →';
-  ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value='');
+  ['cj-name','cj-phone','cj-address','cj-site-in','cj-work-start','cj-work-end'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cj-site-type').value='';
   document.getElementById('cj-layout').value='';
   document.getElementById('cj-kitchens').value='1';
   document.getElementById('kitchen-count-field').style.display='none';
   document.getElementById('kitchen-note').classList.remove('show');
   toast('✅ Job created successfully!');
-  // Go back to dashboard, not navigate forward
   navStack = ['view-dashboard'];
   history.replaceState({ view:'view-dashboard' },'','#view-dashboard');
   _showView('view-dashboard');
@@ -1073,26 +1100,29 @@ async function startTask(taskId) {
 }
 
 async function completeTask(taskId) {
-  const task = currentTasks.find(t=>t.id===taskId);
   const now = new Date();
-  // Use actual started_at from DB; if missing, treat as started now (0 elapsed)
-  const startedAt = task.started_at ? new Date(task.started_at) : now;
+  // ALWAYS fetch fresh from DB — never use cached started_at.
+  // Cache can hold stale timestamps from previous sessions or other tasks.
+  const { data: freshTask } = await db.from('tasks').select('*').eq('id', taskId).single();
+  if (!freshTask) return;
+
+  const startedAt = freshTask.started_at ? new Date(freshTask.started_at) : now;
   const elapsedMs = Math.max(0, now - startedAt);
-  // Store actual time in minutes, floored (not rounded/maxed) so 59s = 0min, 61s = 1min
-  // This prevents a 30-second task from being counted as "1 minute" and triggering delay
+  // Floor so 59s = 0 min. No forced minimum — avoids falsely marking fast tasks as delayed.
   const actualMinutes = Math.floor(elapsedMs / 60000);
-  // Only flag as delayed if actual time STRICTLY exceeds estimate by more than 1 minute
-  // This gives a 1-minute grace buffer so minor overruns don't penalise workers
-  const isDelayed = task.estimated_time != null
-    && actualMinutes > task.estimated_time + 1;
+  // Delayed only if actual exceeds estimate by MORE than 2 minutes grace buffer
+  const isDelayed = freshTask.estimated_time != null
+    && actualMinutes > freshTask.estimated_time + 2;
+
   await db.from('tasks').update({
     status: isDelayed ? 'delayed' : 'completed',
     completed_at: now.toISOString(),
     actual_time: actualMinutes
   }).eq('id', taskId);
+
   delete taskCache[currentRoom.id];
-  if (isDelayed) { delayTaskId=taskId; openModal('delay-modal'); }
-  else { await loadTasks(currentRoom.id); toast('✅ Task completed!','var(--green)'); }
+  if (isDelayed) { delayTaskId = taskId; openModal('delay-modal'); }
+  else { await loadTasks(currentRoom.id); toast('✅ Task completed!', 'var(--green)'); }
 }
 
 async function submitDelay(withReason) {
@@ -1225,16 +1255,15 @@ function fmtTime(iso) { if(!iso)return'—'; return new Date(iso).toLocaleTimeSt
 // ===================== PDF REPORT =====================
 async function downloadJobReport() {
   if (!currentJob) return;
-  toast('📄 Generating report...', 'var(--purple)');
+  toast('Generating report...', 'var(--purple)');
 
-  // Fetch all rooms and tasks for this job
-  const { data: rooms } = await db.from('rooms').select('*').eq('job_id', currentJob.id).order('created_at');
-  const { data: issues } = await db.from('issues').select('*').eq('job_id', currentJob.id).order('created_at');
+  const { data: rooms }    = await db.from('rooms').select('*').eq('job_id', currentJob.id).order('created_at');
+  const { data: issues }   = await db.from('issues').select('*').eq('job_id', currentJob.id).order('created_at');
   const { data: allTasks } = await db.from('tasks')
     .select('*, workers(name, role)')
-    .in('room_id', (rooms||[]).map(r=>r.id));
+    .in('room_id', (rooms||[]).map(r => r.id))
+    .order('status');
 
-  // Group tasks by room
   const tasksByRoom = {};
   (allTasks||[]).forEach(t => {
     if (!tasksByRoom[t.room_id]) tasksByRoom[t.room_id] = [];
@@ -1242,281 +1271,347 @@ async function downloadJobReport() {
   });
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-  const W = 210, margin = 16;
-  const col = W - margin*2;
+  const doc  = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+  const PW   = 210, PH = 297;
+  const ML   = 14, MR = 14;
+  const CW   = PW - ML - MR;  // usable width = 182mm
   let y = 0;
 
-  // ---- COLOURS ----
-  const C = {
-    bg:      [10, 12, 16],
-    surface: [18, 22, 32],
-    accent:  [59,130,246],
-    green:   [34,197,94],
-    yellow:  [245,158,11],
-    red:     [239,68,68],
-    purple:  [168,85,247],
-    text:    [238,240,246],
-    muted:   [122,133,168],
-    border:  [37,45,64],
-    white:   [255,255,255],
-  };
+  // ── Palette (pure RGB arrays, NO emoji, NO unicode symbols) ──
+  const BG   = [8, 10, 16];
+  const SUR  = [18, 22, 34];
+  const SUR2 = [24, 30, 46];
+  const BOR  = [40, 50, 74];
+  const TXT  = [230, 235, 248];
+  const MUT  = [110, 122, 160];
+  const ACC  = [59, 130, 246];
+  const GRN  = [34, 197, 94];
+  const YEL  = [245, 158, 11];
+  const RED  = [220, 60, 60];
+  const PUR  = [150, 80, 230];
+  const WHT  = [255, 255, 255];
 
-  // Helper: filled rect
-  function fillRect(x,ry,w,h,color) { doc.setFillColor(...color); doc.rect(x,ry,w,h,'F'); }
-  // Helper: text
-  function txt(str, x, ry, size, color, align='left', style='normal') {
-    doc.setFontSize(size); doc.setTextColor(...color); doc.setFont('helvetica', style);
-    doc.text(String(str||''), x, ry, { align });
-  }
-  // Helper: line
-  function hLine(ry, color) { doc.setDrawColor(...color); doc.setLineWidth(0.3); doc.line(margin, ry, W-margin, ry); }
-  // Helper: badge pill
-  function badge(label, x, ry, bgColor, textColor) {
-    const pw = doc.getStringUnitWidth(label)*3.2+6;
-    doc.setFillColor(...bgColor); doc.roundedRect(x, ry-3.2, pw, 5, 1.5, 1.5, 'F');
-    doc.setFontSize(6.5); doc.setTextColor(...textColor); doc.setFont('helvetica','bold');
-    doc.text(label, x+3, ry+0.2);
-    return pw;
+  // ── Helpers ──────────────────────────────────────────────────
+  const fr = (x,ry,w,h,c) => { doc.setFillColor(...c); doc.rect(x,ry,w,h,'F'); };
+  const ln = (ry,c,lw=0.25) => { doc.setDrawColor(...c); doc.setLineWidth(lw); doc.line(ML,ry,PW-MR,ry); };
+  const sr = (x,ry,w,h,c,lw=0.2) => { doc.setDrawColor(...c); doc.setLineWidth(lw); doc.rect(x,ry,w,h,'S'); };
+
+  function t(str, x, ry, sz, col, align='left', bold=false) {
+    doc.setFontSize(sz);
+    doc.setTextColor(...col);
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    const s = String(str ?? '');
+    // Clip long strings to avoid overflow — use splitTextToSize for safety
+    doc.text(s, x, ry, { align, baseline:'middle' });
   }
 
-  // ---- PAGE BACKGROUND ----
-  function drawPageBg() {
-    fillRect(0,0,W,297,C.bg);
-    // top accent strip
-    fillRect(0,0,W,1.5,C.accent);
+  // Pill badge — returns width used
+  function pill(label, x, ry, bg, fg, sz=6) {
+    doc.setFontSize(sz);
+    doc.setFont('helvetica','bold');
+    const tw = doc.getStringUnitWidth(label) * sz / doc.internal.scaleFactor + 4;
+    fr(x, ry-2.4, tw, 4.8, bg);
+    doc.setTextColor(...fg);
+    doc.text(label, x + tw/2, ry, { align:'center', baseline:'middle' });
+    return tw + 1;
   }
 
-  // ---- HEADER ----
-  function drawHeader() {
-    drawPageBg();
-    // Brand bar
-    fillRect(0,1.5,W,28,C.surface);
-    // Logo placeholder circle
-    doc.setFillColor(...C.accent);
-    doc.circle(margin+7, 15.5, 7, 'F');
-    doc.setFontSize(8); doc.setTextColor(...C.white); doc.setFont('helvetica','bold');
-    doc.text('HS', margin+7, 17.2, {align:'center'});
-    // Brand name
-    txt('Handy sQuad', margin+18, 13, 13, C.accent, 'left', 'bold');
-    txt('HOUSEKEEPING SUPERVISOR SYSTEM', margin+18, 18.5, 6.5, C.muted, 'left', 'normal');
-    // Report label right
-    txt('JOB REPORT', W-margin, 13, 9, C.text, 'right', 'bold');
-    txt(fmtDateShort(new Date().toISOString()), W-margin, 18.5, 6.5, C.muted, 'right', 'normal');
-    // Divider
-    hLine(29.5, C.border);
-    y = 36;
+  // Status pill helper
+  function statusPill(status, x, ry) {
+    const map = {
+      'completed':   { bg:[20,70,30],  fg:GRN, label:'DONE'        },
+      'in_progress': { bg:[70,55,10],  fg:YEL, label:'IN PROGRESS' },
+      'delayed':     { bg:[70,18,18],  fg:RED, label:'DELAYED'      },
+      'not_started': { bg:[30,35,55],  fg:MUT, label:'PENDING'      },
+    };
+    const s = map[status] || map['not_started'];
+    return pill(s.label, x, ry, s.bg, s.fg);
   }
 
-  // ---- JOB INFO SECTION ----
-  function drawJobInfo() {
-    txt('JOB DETAILS', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
-    hLine(y, C.border); y += 4;
-
-    const half = col/2;
-    const fields = [
-      ['CUSTOMER', currentJob.customer_name],
-      ['PHONE', currentJob.phone||'—'],
-      ['SITE TYPE', currentJob.site_type||'—'],
-      ['LAYOUT', currentJob.layout_type||'—'],
-      ['STATUS', (currentJob.status||'').toUpperCase()],
-      ['ADDRESS', currentJob.address||'—'],
-      ['SITE IN', fmtTime(currentJob.site_in_time)],
-      ['SITE OUT', fmtTime(currentJob.site_out_time)],
-    ];
-
-    let row = 0;
-    fields.forEach(([label, val], i) => {
-      const isFullWidth = (label==='ADDRESS');
-      const x = isFullWidth || (i%2===0) ? margin : margin + half + 4;
-      const boxW = isFullWidth ? col : half - 2;
-      // Box
-      fillRect(x, y, boxW, 11, C.surface);
-      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(x, y, boxW, 11, 'S');
-      txt(label, x+3, y+4, 5.5, C.muted, 'left', 'normal');
-      txt(val, x+3, y+9, 7, C.text, 'left', 'bold');
-      if (isFullWidth || i%2===1) { y += 13; }
-    });
-    y += 6;
+  // Safe text — truncate to maxW mm before rendering
+  function safeT(str, x, ry, sz, col, maxW, bold=false) {
+    doc.setFontSize(sz); doc.setFont('helvetica', bold?'bold':'normal');
+    const parts = doc.splitTextToSize(String(str??''), maxW);
+    doc.setTextColor(...col);
+    doc.text(parts[0]||'', x, ry, { baseline:'middle' });
   }
 
-  // ---- SUMMARY STATS ----
-  function drawSummaryStats(rooms, allTasks) {
-    const total = allTasks.length;
-    const done = allTasks.filter(t=>t.status==='completed').length;
-    const delayed = allTasks.filter(t=>t.status==='delayed').length;
-    const inProg = allTasks.filter(t=>t.status==='in_progress'||t.status==='not_started').length;
-    const pct = total>0 ? Math.round(done/total*100) : 0;
-    const totalEst = allTasks.reduce((s,t)=>s+(t.estimated_time||0),0);
-    const totalAct = allTasks.reduce((s,t)=>s+(t.actual_time||0),0);
+  // ── Page helpers ─────────────────────────────────────────────
+  function pageBg() { fr(0,0,PW,PH,BG); }
 
-    txt('SUMMARY', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
-    hLine(y, C.border); y += 4;
-
-    const boxes = [
-      { label:'ROOMS', val:rooms.length, color:C.accent },
-      { label:'TASKS DONE', val:`${done}/${total}`, color:C.green },
-      { label:'DELAYED', val:delayed, color:C.red },
-      { label:'COMPLETION', val:`${pct}%`, color: pct===100?C.green:pct>50?C.yellow:C.red },
-    ];
-    const bw = col/4;
-    boxes.forEach((b,i) => {
-      const x = margin + i*bw;
-      fillRect(x+1, y, bw-2, 16, C.surface);
-      doc.setDrawColor(...b.color); doc.setLineWidth(0.5); doc.rect(x+1, y, bw-2, 16, 'S');
-      txt(b.val, x+bw/2, y+9, 12, b.color, 'center', 'bold');
-      txt(b.label, x+bw/2, y+14, 5, C.muted, 'center', 'normal');
-    });
-    y += 20;
-
-    // Time summary
-    if (totalEst > 0 || totalAct > 0) {
-      const tw = col/2;
-      fillRect(margin, y, tw-2, 11, C.surface);
-      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(margin, y, tw-2, 11, 'S');
-      txt('TOTAL ESTIMATED', margin+3, y+4, 5.5, C.muted);
-      txt(`${totalEst} min`, margin+3, y+9, 7.5, C.accent, 'left', 'bold');
-
-      fillRect(margin+tw+2, y, tw-2, 11, C.surface);
-      doc.setDrawColor(...C.border); doc.setLineWidth(0.2); doc.rect(margin+tw+2, y, tw-2, 11, 'S');
-      txt('TOTAL ACTUAL', margin+tw+5, y+4, 5.5, C.muted);
-      const actColor = totalAct > totalEst+2 ? C.red : C.green;
-      txt(`${totalAct} min`, margin+tw+5, y+9, 7.5, actColor, 'left', 'bold');
-      y += 15;
-    }
-    y += 4;
-  }
-
-  // ---- ROOMS & TASKS ----
-  function ensureSpace(needed) {
-    if (y + needed > 282) {
+  function ensureY(need) {
+    if (y + need > PH - 18) {
+      addFooter();
       doc.addPage();
-      drawPageBg();
-      y = 20;
+      pageBg();
+      y = 14;
     }
   }
 
-  function drawRoomsAndTasks(rooms, tasksByRoom) {
-    txt('ROOMS & TASKS', margin, y, 7.5, C.accent, 'left', 'bold'); y += 5;
-    hLine(y, C.border); y += 5;
+  function addFooter() {
+    fr(0, PH-10, PW, 10, SUR);
+    doc.setDrawColor(...BOR); doc.setLineWidth(0.2); doc.line(0, PH-10, PW, PH-10);
+    t('Handy sQuad  |  Housekeeping Report', ML, PH-5, 5.5, MUT, 'left');
+    t('Generated: ' + fmtDate(new Date().toISOString()), PW/2, PH-5, 5.5, MUT, 'center');
+    t('Page ' + doc.getCurrentPageInfo().pageNumber, PW-MR, PH-5, 5.5, MUT, 'right');
+  }
 
-    (rooms||[]).forEach(room => {
-      const tasks = tasksByRoom[room.id] || [];
-      const done = tasks.filter(t=>t.status==='completed').length;
-      const allDone = tasks.length>0 && done===tasks.length;
+  // ── COVER HEADER ─────────────────────────────────────────────
+  pageBg();
+  // Top accent bar
+  fr(0, 0, PW, 2, ACC);
+  // Header band
+  fr(0, 2, PW, 32, SUR);
 
-      ensureSpace(14 + tasks.length*14);
+  // HS circle logo
+  fr(ML, 6, 20, 20, ACC);
+  doc.setTextColor(...WHT); doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text('HS', ML+10, 17, { align:'center', baseline:'middle' });
 
-      // Room header
-      fillRect(margin, y, col, 10, C.surface);
-      doc.setDrawColor(...(allDone?C.green:C.accent)); doc.setLineWidth(0.5);
-      doc.rect(margin, y, col, 10, 'S');
-      // left accent bar
-      fillRect(margin, y, 2.5, 10, allDone?C.green:C.accent);
-      txt((ROOM_ICONS[room.room_name]||''), margin+6, y+7, 9, C.text, 'left', 'normal');
-      txt(room.room_name, margin+14, y+7, 8, C.text, 'left', 'bold');
-      txt(`${done}/${tasks.length} tasks done`, W-margin-2, y+7, 6.5, allDone?C.green:C.muted, 'right', 'normal');
-      y += 12;
+  // Brand text
+  t('Handy sQuad', ML+24, 13, 14, ACC, 'left', true);
+  t('HOUSEKEEPING SUPERVISOR SYSTEM', ML+24, 21, 6.5, MUT);
 
-      if (!tasks.length) {
-        txt('  No tasks assigned', margin+6, y+4, 6.5, C.muted);
-        y += 8;
-      } else {
-        tasks.forEach(t => {
-          ensureSpace(12);
-          const statusColors = {
-            'completed':   [C.green,   'DONE'],
-            'in_progress': [C.yellow,  'IN PROGRESS'],
-            'delayed':     [C.red,     'DELAYED'],
-            'not_started': [C.muted,   'PENDING'],
-          };
-          const [sColor, sLabel] = statusColors[t.status]||[C.muted,'—'];
+  // Report title right
+  t('JOB COMPLETION REPORT', PW-MR, 13, 10, TXT, 'right', true);
+  t(fmtDateShort(new Date().toISOString()), PW-MR, 21, 6.5, MUT, 'right');
 
-          fillRect(margin+3, y, col-3, 11, [14,18,28]);
-          doc.setDrawColor(...C.border); doc.setLineWidth(0.15); doc.rect(margin+3, y, col-3, 11, 'S');
-          // status left bar
-          fillRect(margin+3, y, 1.5, 11, sColor);
+  doc.setDrawColor(...BOR); doc.setLineWidth(0.3); doc.line(0, 34, PW, 34);
+  y = 42;
 
-          txt(t.task_name, margin+8, y+4.5, 7, C.text, 'left', 'bold');
-          // worker
-          const wName = t.workers?.name ? `👤 ${t.workers.name}` : '👤 Unassigned';
-          txt(wName, margin+8, y+9, 5.5, C.muted);
+  // ── JOB DETAILS ──────────────────────────────────────────────
+  t('JOB DETAILS', ML, y, 8, ACC, 'left', true); y += 4;
+  ln(y, BOR); y += 5;
 
-          // right: status badge + times
-          let bx = W - margin - 2;
-          badge(sLabel, bx - (doc.getStringUnitWidth(sLabel)*3.2+9), y+5, sColor.map(v=>Math.min(255,v+180>255?v:v+40)), sColor);
+  // Two-column info boxes
+  const hf = CW/2 - 2;
+  const infoRows = [
+    [['CUSTOMER NAME', currentJob.customer_name||'—'], ['PHONE', currentJob.phone||'—']],
+    [['SITE TYPE',     currentJob.site_type||'—'],     ['LAYOUT', currentJob.layout_type||'—']],
+    [['STATUS',        (currentJob.status||'').toUpperCase()], ['ADDRESS', currentJob.address||'—']],
+    [['SITE ARRIVAL',  fmtTime(currentJob.site_in_time)], ['WORK STARTED', fmtTime(currentJob.work_start_time)]],
+    [['WORK ENDED',    fmtTime(currentJob.site_out_time)], ['DURATION', (() => {
+      if (!currentJob.site_in_time || !currentJob.site_out_time) return '—';
+      const mins = Math.round((new Date(currentJob.site_out_time)-new Date(currentJob.site_in_time))/60000);
+      return mins > 0 ? `${Math.floor(mins/60)}h ${mins%60}m` : '—';
+    })()]],
+  ];
 
-          // time info below task name
-          const timeStr = [
-            t.estimated_time != null ? `Est: ${t.estimated_time}m` : '',
-            t.actual_time != null    ? `Actual: ${t.actual_time}m` : '',
-            t.difficulty             ? `[${t.difficulty}]` : '',
-          ].filter(Boolean).join('  ');
-          if (timeStr) txt(timeStr, margin+8, y+9, 5.5, C.muted);
+  infoRows.forEach(row => {
+    row.forEach(([label, val], ci) => {
+      const bx = ML + ci*(hf+4);
+      fr(bx, y, hf, 12, SUR2);
+      sr(bx, y, hf, 12, BOR);
+      fr(bx, y, 1.5, 12, ci===0?ACC:PUR);
+      t(label, bx+5, y+4, 5.5, MUT);
+      safeT(val, bx+5, y+9, 7.5, TXT, hf-8, true);
+    });
+    y += 14;
+  });
+  y += 4;
 
-          y += 13;
-        });
-      }
+  // ── SUMMARY ──────────────────────────────────────────────────
+  ensureY(50);
+  t('SUMMARY', ML, y, 8, ACC, 'left', true); y += 4;
+  ln(y, BOR); y += 5;
 
-      // Delay reasons
-      const delayed = tasks.filter(t=>t.status==='delayed'&&t.delay_reason);
-      delayed.forEach(t => {
-        ensureSpace(10);
-        fillRect(margin+3, y, col-3, 9, [30,10,10]);
-        doc.setDrawColor(...C.red); doc.setLineWidth(0.2); doc.rect(margin+3, y, col-3, 9, 'S');
-        txt('⚠ DELAY — ' + t.task_name + ': ' + (t.delay_reason||''), margin+6, y+5.5, 6, C.red);
-        y += 11;
+  const totTasks  = (allTasks||[]).length;
+  const doneTasks = (allTasks||[]).filter(t=>t.status==='completed').length;
+  const delTasks  = (allTasks||[]).filter(t=>t.status==='delayed').length;
+  const pctDone   = totTasks > 0 ? Math.round(doneTasks/totTasks*100) : 0;
+  const totEst    = (allTasks||[]).reduce((s,t)=>s+(t.estimated_time||0),0);
+  const totAct    = (allTasks||[]).reduce((s,t)=>s+(t.actual_time||0),0);
+
+  const statBoxes = [
+    { label:'ROOMS',      val:String((rooms||[]).length), col:ACC },
+    { label:'TASKS DONE', val:`${doneTasks}/${totTasks}`, col:GRN },
+    { label:'DELAYED',    val:String(delTasks),           col:RED },
+    { label:'COMPLETION', val:`${pctDone}%`,              col: pctDone===100?GRN:pctDone>50?YEL:RED },
+  ];
+  const bw = CW/4;
+  statBoxes.forEach((b,i) => {
+    const bx = ML + i*bw;
+    fr(bx+1, y, bw-2, 18, SUR2);
+    doc.setDrawColor(...b.col); doc.setLineWidth(0.5); doc.rect(bx+1,y,bw-2,18,'S');
+    t(b.val, bx+bw/2, y+9, 13, b.col, 'center', true);
+    t(b.label, bx+bw/2, y+15, 5, MUT, 'center');
+  });
+  y += 22;
+
+  // Time bar
+  if (totEst > 0 || totAct > 0) {
+    const hw = CW/2-2;
+    fr(ML, y, hw, 12, SUR2); sr(ML, y, hw, 12, BOR);
+    fr(ML, y, 1.5, 12, ACC);
+    t('TOTAL ESTIMATED', ML+5, y+4, 5.5, MUT);
+    t(`${totEst} min`, ML+5, y+9.5, 8, ACC, 'left', true);
+
+    const actCol = totAct > totEst+5 ? RED : GRN;
+    fr(ML+hw+4, y, hw, 12, SUR2); sr(ML+hw+4, y, hw, 12, BOR);
+    fr(ML+hw+4, y, 1.5, 12, actCol);
+    t('TOTAL ACTUAL', ML+hw+9, y+4, 5.5, MUT);
+    t(`${totAct} min`, ML+hw+9, y+9.5, 8, actCol, 'left', true);
+    y += 16;
+  }
+  y += 6;
+
+  // ── ROOMS & TASKS ─────────────────────────────────────────────
+  ensureY(20);
+  t('ROOMS & TASKS BREAKDOWN', ML, y, 8, ACC, 'left', true); y += 4;
+  ln(y, BOR); y += 6;
+
+  (rooms||[]).forEach(room => {
+    const tasks    = tasksByRoom[room.id] || [];
+    const doneHere = tasks.filter(t=>t.status==='completed').length;
+    const allDoneHere = tasks.length > 0 && doneHere === tasks.length;
+    const roomColor = allDoneHere ? GRN : ACC;
+
+    ensureY(12 + Math.max(tasks.length, 1) * 22 + 6);
+
+    // Room header row
+    fr(ML, y, CW, 11, SUR2);
+    fr(ML, y, 3, 11, roomColor);
+    doc.setDrawColor(...roomColor); doc.setLineWidth(0.4); doc.rect(ML, y, CW, 11, 'S');
+    t(room.room_name.toUpperCase(), ML+7, y+5.5, 8, TXT, 'left', true);
+    t(`${doneHere} / ${tasks.length} tasks`, PW-MR, y+5.5, 6.5, allDoneHere?GRN:MUT, 'right');
+    if (allDoneHere) pill('ALL DONE', PW-MR-28, y+3.8, [15,50,25], GRN, 5.5);
+    y += 13;
+
+    if (!tasks.length) {
+      fr(ML+3, y, CW-3, 8, [14,16,26]);
+      t('No tasks assigned to this room', ML+8, y+4, 6.5, MUT);
+      y += 10;
+    } else {
+      tasks.forEach(task => {
+        ensureY(22);
+        const isDelayed   = task.status === 'delayed';
+        const isCompleted = task.status === 'completed';
+        const rowBg = isDelayed ? [28,12,12] : isCompleted ? [12,28,18] : SUR;
+        const leftBarCol = isDelayed ? RED : isCompleted ? GRN : task.status==='in_progress' ? YEL : BOR;
+
+        // Task card — 20mm tall (enough for 3 lines of info)
+        fr(ML+3, y, CW-3, 20, rowBg);
+        fr(ML+3, y, 2.5, 20, leftBarCol);
+        doc.setDrawColor(...BOR); doc.setLineWidth(0.15); doc.rect(ML+3, y, CW-3, 20, 'S');
+
+        // Task name (line 1)
+        safeT(task.task_name, ML+9, y+5.5, 8, TXT, CW-50, true);
+
+        // Worker (line 2)
+        const workerStr = task.workers?.name
+          ? task.workers.name + (task.workers.role ? '  (' + task.workers.role + ')' : '')
+          : 'Unassigned';
+        t('Worker: ', ML+9, y+11.5, 6, MUT, 'left', true);
+        safeT(workerStr, ML+9+14, y+11.5, 6.5, isCompleted?GRN:TXT, CW-60, false);
+
+        // Time info (line 3)
+        const timeParts = [];
+        if (task.estimated_time != null) timeParts.push('Est: ' + task.estimated_time + 'm');
+        if (task.actual_time    != null) timeParts.push('Actual: ' + task.actual_time + 'm');
+        if (task.difficulty)             timeParts.push(task.difficulty.toUpperCase());
+        if (timeParts.length) {
+          const timeStr = timeParts.join('   |   ');
+          t(timeStr, ML+9, y+17, 5.5, MUT);
+        }
+
+        // Status pill — right side
+        statusPill(task.status, PW-MR-42, y+6);
+
+        y += 22;
+
+        // Delay reason block (extra row if delayed with reason)
+        if (isDelayed && task.delay_reason) {
+          ensureY(10);
+          fr(ML+3, y, CW-3, 10, [40,10,10]);
+          doc.setDrawColor(...RED); doc.setLineWidth(0.2); doc.rect(ML+3, y, CW-3, 10, 'S');
+          t('DELAY REASON:', ML+8, y+5, 6, RED, 'left', true);
+          safeT(task.delay_reason, ML+38, y+5, 6, [220,160,160], CW-50);
+          y += 12;
+        }
       });
+    }
+    y += 5;
+  });
 
-      y += 3;
-    });
-  }
+  // ── ISSUES ───────────────────────────────────────────────────
+  if ((issues||[]).length) {
+    ensureY(20);
+    t('ISSUES LOGGED', ML, y, 8, RED, 'left', true); y += 4;
+    doc.setDrawColor(...RED); doc.setLineWidth(0.3); doc.line(ML, y, PW-MR, y); y += 5;
 
-  // ---- ISSUES ----
-  function drawIssues(issues) {
-    if (!issues?.length) return;
-    ensureSpace(20);
-    txt('ISSUES LOGGED', margin, y, 7.5, C.red, 'left', 'bold'); y += 5;
-    hLine(y, C.red); y += 5;
     issues.forEach(issue => {
-      ensureSpace(12);
-      fillRect(margin, y, col, 10, [25,10,10]);
-      doc.setDrawColor(...C.red); doc.setLineWidth(0.2); doc.rect(margin, y, col, 10, 'S');
-      txt('⚠', margin+3, y+7, 8, C.red);
-      txt(issue.description||'', margin+10, y+4.5, 6.5, C.text);
-      txt(fmtDate(issue.created_at), W-margin-2, y+7.5, 5.5, C.muted, 'right');
-      y += 12;
+      ensureY(14);
+      fr(ML, y, CW, 12, [28,10,10]);
+      doc.setDrawColor(...RED); doc.setLineWidth(0.2); doc.rect(ML, y, CW, 12, 'S');
+      fr(ML, y, 2.5, 12, RED);
+      safeT(issue.description||'—', ML+7, y+6, 7, TXT, CW-40);
+      t(fmtDate(issue.created_at), PW-MR, y+6, 5.5, MUT, 'right');
+      y += 14;
     });
+  }
+
+  // ── WORKER SUMMARY ───────────────────────────────────────────
+  const workerMap = {};
+  (allTasks||[]).forEach(task => {
+    if (!task.workers?.name) return;
+    const wk = task.workers.name;
+    if (!workerMap[wk]) workerMap[wk] = { role: task.workers.role||'', done:0, delayed:0, total:0 };
+    workerMap[wk].total++;
+    if (task.status==='completed') workerMap[wk].done++;
+    if (task.status==='delayed')   workerMap[wk].delayed++;
+  });
+
+  const workerNames = Object.keys(workerMap);
+  if (workerNames.length) {
+    ensureY(24 + workerNames.length * 12);
     y += 4;
+    t('WORKER PERFORMANCE', ML, y, 8, PUR, 'left', true); y += 4;
+    doc.setDrawColor(...PUR); doc.setLineWidth(0.3); doc.line(ML, y, PW-MR, y); y += 5;
+
+    // Header row
+    fr(ML, y, CW, 9, SUR2);
+    fr(ML, y, CW, 9, SUR2);
+    doc.setDrawColor(...BOR); doc.setLineWidth(0.2); doc.rect(ML, y, CW, 9, 'S');
+    t('WORKER', ML+4, y+4.5, 6, MUT, 'left', true);
+    t('ROLE', ML+60, y+4.5, 6, MUT, 'left', true);
+    t('TOTAL', ML+110, y+4.5, 6, MUT, 'center', true);
+    t('DONE', ML+130, y+4.5, 6, MUT, 'center', true);
+    t('DELAYED', ML+150, y+4.5, 6, MUT, 'center', true);
+    t('RATE', PW-MR, y+4.5, 6, MUT, 'right', true);
+    y += 10;
+
+    workerNames.forEach((wName, idx) => {
+      const wk = workerMap[wName];
+      const rate = wk.total > 0 ? Math.round(wk.done/wk.total*100) : 0;
+      const rateCol = rate===100?GRN:rate>50?YEL:RED;
+      const rowBg = idx%2===0 ? SUR : [14,17,27];
+
+      fr(ML, y, CW, 10, rowBg);
+      doc.setDrawColor(...BOR); doc.setLineWidth(0.15); doc.rect(ML, y, CW, 10, 'S');
+
+      safeT(wName, ML+4, y+5, 7, TXT, 52, true);
+      safeT(wk.role||'—', ML+60, y+5, 6.5, MUT, 46);
+      t(String(wk.total),   ML+110, y+5, 7, TXT, 'center', true);
+      t(String(wk.done),    ML+130, y+5, 7, GRN, 'center', true);
+      t(String(wk.delayed), ML+150, y+5, 7, wk.delayed>0?RED:MUT, 'center', true);
+      t(rate + '%', PW-MR, y+5, 7, rateCol, 'right', true);
+      y += 11;
+    });
   }
 
-  // ---- FOOTER ----
-  function drawFooter(pageNum, pageTotal) {
-    fillRect(0, 285, W, 12, C.surface);
-    hLine(285, C.border);
-    txt('Handy sQuad · Housekeeping Report', margin, 292, 6, C.muted, 'left', 'normal');
-    txt(`Generated: ${fmtDate(new Date().toISOString())}`, W/2, 292, 6, C.muted, 'center', 'normal');
-    txt(`Page ${pageNum} of ${pageTotal}`, W-margin, 292, 6, C.muted, 'right', 'normal');
-  }
+  y += 6;
 
-  // ---- BUILD PDF ----
-  drawHeader();
-  drawJobInfo();
-  drawSummaryStats(rooms||[], allTasks||[]);
-  drawRoomsAndTasks(rooms||[], tasksByRoom);
-  drawIssues(issues||[]);
-
-  // Add footers to all pages
+  // ── FOOTERS ──────────────────────────────────────────────────
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
-    drawFooter(p, totalPages);
+    addFooter();
   }
 
-  // Save
-  const fname = `HandySquad_${(currentJob.customer_name||'Job').replace(/\s+/g,'_')}_${fmtDateShort(new Date().toISOString()).replace(/ /g,'-')}.pdf`;
-  doc.save(fname);
-  toast('✅ Report downloaded!', 'var(--green)');
+  const safeName = (currentJob.customer_name||'Job').replace(/[^a-zA-Z0-9_]/g,'_');
+  const dateStr  = fmtDateShort(new Date().toISOString()).replace(/\s/g,'-');
+  doc.save(`HandySquad_${safeName}_${dateStr}.pdf`);
+  toast('Report downloaded!', 'var(--green)');
 }
 // ===================== END PDF =====================
 </script>
