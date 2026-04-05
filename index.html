@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CleanOps — Housekeeping Supervisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg: #0e0f11;
+    --surface: #16181c;
+    --surface2: #1e2028;
+    --border: #2a2d36;
+    --text: #f0f0f0;
+    --muted: #8a8fa8;
+    --accent: #00e5a0;
+    --accent-dim: rgba(0,229,160,0.12);
+    --yellow: #f5c842;
+    --yellow-dim: rgba(245,200,66,0.12);
+    --red: #ff4f6a;
+    --red-dim: rgba(255,79,106,0.12);
+    --blue: #4fa3ff;
+    --blue-dim: rgba(79,163,255,0.12);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 15px; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-head);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---- SCROLLBAR ---- */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ---- VIEWS ---- */
+  .view { display: none; min-height: 100vh; padding-bottom: 80px; }
+  .view.active { display: block; }
+
+  /* ---- TOP NAV ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(14,15,17,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .back-btn {
+    background: var(--surface2); border: none; color: var(--text);
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background .2s;
+  }
+  .back-btn:hover { background: var(--border); }
+  .topbar-title {
+    font-family: var(--font-head); font-weight: 700; font-size: 1.05rem;
+    line-height: 1.2;
+  }
+  .topbar-sub { font-size: 0.72rem; color: var(--muted); font-family: var(--font-mono); }
+  .logout-btn {
+    background: var(--red-dim); border: 1px solid var(--red);
+    color: var(--red); padding: 7px 14px; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 0.7rem; cursor: pointer;
+    transition: background .2s;
+  }
+  .logout-btn:hover { background: rgba(255,79,106,0.22); }
+
+  /* ---- LOGIN ---- */
+  #view-login {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-height: 100vh; padding: 30px 24px;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,229,160,0.07) 0%, transparent 70%);
+  }
+  .login-logo {
+    font-family: var(--font-head); font-weight: 800; font-size: 2.2rem;
+    letter-spacing: -1px; color: var(--accent); margin-bottom: 4px;
+  }
+  .login-tagline { color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; margin-bottom: 40px; }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 28px 22px; width: 100%; max-width: 380px;
+  }
+  .login-card h2 { font-size: 1.2rem; font-weight: 700; margin-bottom: 22px; }
+  .error-msg {
+    background: var(--red-dim); border: 1px solid var(--red);
+    color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm);
+    font-size: 0.8rem; margin-bottom: 16px; display: none;
+    font-family: var(--font-mono);
+  }
+  .error-msg.show { display: block; }
+
+  /* ---- FORM ELEMENTS ---- */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono); margin-bottom: 6px; }
+  .field input, .field select, .field textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 12px 14px; border-radius: var(--radius-sm);
+    font-family: var(--font-head); font-size: 0.9rem;
+    transition: border-color .2s; outline: none; appearance: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 80px; }
+  .field select option { background: var(--surface); }
+
+  /* ---- BUTTONS ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 12px 20px; border-radius: var(--radius-sm); font-family: var(--font-mono);
+    font-size: 0.8rem; font-weight: 700; cursor: pointer; border: none;
+    transition: opacity .2s, transform .1s; letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #000; width: 100%; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+  .btn-outline {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text); width: 100%;
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); width: 100%; }
+  .btn-yellow { background: var(--yellow-dim); border: 1px solid var(--yellow); color: var(--yellow); }
+  .btn-green { background: var(--accent-dim); border: 1px solid var(--accent); color: var(--accent); }
+  .btn-sm { padding: 7px 13px; font-size: 0.68rem; width: auto; }
+
+  /* ---- CONTENT AREA ---- */
+  .content { padding: 18px; }
+
+  /* ---- CARDS ---- */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+    cursor: pointer; transition: border-color .2s, transform .15s;
+    position: relative; overflow: hidden;
+  }
+  .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; background: var(--accent);
+    border-radius: 3px 0 0 3px;
+  }
+  .card.yellow::before { background: var(--yellow); }
+  .card.red::before { background: var(--red); }
+  .card.grey::before { background: var(--muted); }
+  .card-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+  .card-meta { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+
+  /* ---- STATUS BADGES ---- */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-family: var(--font-mono); font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .badge-green { background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); }
+  .badge-yellow { background: var(--yellow-dim); color: var(--yellow); border: 1px solid var(--yellow); }
+  .badge-red { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+  .badge-muted { background: rgba(138,143,168,0.1); color: var(--muted); border: 1px solid var(--border); }
+  .badge-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+
+  /* ---- SECTION HEADER ---- */
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title { font-weight: 800; font-size: 1.1rem; }
+  .section-count { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+
+  /* ---- BOTTOM FAB ---- */
+  .fab-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(14,15,17,0.97); border-top: 1px solid var(--border);
+    padding: 12px 18px; display: flex; gap: 10px; z-index: 99;
+  }
+  .fab-bar .btn { flex: 1; }
+
+  /* ---- EMPTY STATE ---- */
+  .empty {
+    text-align: center; padding: 50px 20px; color: var(--muted);
+    font-family: var(--font-mono); font-size: 0.8rem;
+  }
+  .empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.4; }
+
+  /* ---- MODAL ---- */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 200;
+    align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 24px 20px; width: 100%; max-width: 520px;
+    max-height: 88vh; overflow-y: auto;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(60px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .modal-title {
+    font-weight: 800; font-size: 1.1rem; margin-bottom: 20px;
+    padding-bottom: 14px; border-bottom: 1px solid var(--border);
+  }
+  .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .modal-actions .btn { flex: 1; }
+
+  /* ---- TABS ---- */
+  .tabs { display: flex; gap: 4px; background: var(--surface2); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 18px; }
+  .tab {
+    flex: 1; padding: 9px 6px; text-align: center; border-radius: 6px;
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; cursor: pointer; color: var(--muted);
+    transition: all .2s; letter-spacing: 0.04em;
+  }
+  .tab.active { background: var(--accent); color: #000; }
+
+  /* ---- TASK CARD ---- */
+  .task-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px; margin-bottom: 10px;
+  }
+  .task-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .task-name { font-weight: 700; font-size: 0.9rem; line-height: 1.3; }
+  .task-worker { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); margin-top: 2px; }
+  .task-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .task-actions { display: flex; gap: 8px; }
+  .task-actions .btn { flex: 1; }
+
+  /* ---- STAT ROW ---- */
+  .stat-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px; margin-bottom: 18px;
+  }
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 10px; text-align: center;
+  }
+  .stat-num { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+
+  /* ---- LOADER ---- */
+  .loader {
+    text-align: center; padding: 40px; color: var(--muted);
+    font-family: var(--font-mono); font-size: 0.75rem;
+  }
+  .spinner {
+    width: 28px; height: 28px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- ISSUE CARD ---- */
+  .issue-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
+  }
+  .issue-desc { font-size: 0.88rem; line-height: 1.5; }
+  .issue-time { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+
+  /* ---- DIVIDER ---- */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+  /* ---- JOB DETAIL INFO ---- */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .info-item { background: var(--surface2); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .info-label { font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted); margin-bottom: 3px; }
+  .info-value { font-size: 0.88rem; font-weight: 600; }
+
+  /* ---- WORKER CARD ---- */
+  .worker-card {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 8px;
+  }
+  .worker-avatar {
+    width: 40px; height: 40px; background: var(--accent-dim);
+    border: 1px solid var(--accent); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1rem; color: var(--accent); flex-shrink: 0;
+  }
+  .worker-info { flex: 1; }
+  .worker-name { font-weight: 700; font-size: 0.9rem; }
+  .worker-role { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
+
+  /* ---- DELAY FORM ---- */
+  .delay-form { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
+  .delay-form .field { margin-bottom: 8px; }
+
+  /* ---- ROOM GRID ---- */
+  .room-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .room-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 14px;
+    cursor: pointer; transition: border-color .2s, transform .15s;
+    text-align: center;
+  }
+  .room-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .room-icon { font-size: 1.8rem; margin-bottom: 8px; }
+  .room-name { font-weight: 700; font-size: 0.85rem; }
+  .room-tasks { font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ======== LOGIN ======== -->
+<div id="view-login" class="view active">
+  <div class="login-logo">CleanOps</div>
+  <div class="login-tagline">// HOUSEKEEPING SUPERVISOR SYSTEM</div>
+  <div class="login-card">
+    <h2>Sign In</h2>
+    <div class="error-msg" id="login-error"></div>
+    <div class="field">
+      <label>EMAIL ADDRESS</label>
+      <input type="email" id="login-email" placeholder="supervisor@example.com" autocomplete="email">
+    </div>
+    <div class="field">
+      <label>PASSWORD</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="login-btn" onclick="doLogin()">Sign In</button>
+  </div>
+</div>
+
+<!-- ======== DASHBOARD ======== -->
+<div id="view-dashboard" class="view">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div>
+        <div class="topbar-title">CleanOps</div>
+        <div class="topbar-sub" id="dash-user-email">—</div>
+      </div>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">Logout</button>
+  </div>
+  <div class="content">
+    <div class="tabs" id="dash-tabs">
+      <div class="tab active" onclick="switchDashTab('jobs')">Jobs</div>
+      <div class="tab" onclick="switchDashTab('workers')">Workers</div>
+    </div>
+
+    <!-- JOBS TAB -->
+    <div id="dash-jobs-tab">
+      <div class="section-head">
+        <div class="section-title">Active Jobs</div>
+        <div class="section-count" id="jobs-count">—</div>
+      </div>
+      <div id="jobs-list"><div class="loader"><div class="spinner"></div>Loading jobs...</div></div>
+    </div>
+
+    <!-- WORKERS TAB -->
+    <div id="dash-workers-tab" style="display:none;">
+      <div class="section-head">
+        <div class="section-title">Your Workers</div>
+        <div class="section-count" id="workers-count">—</div>
+      </div>
+      <div id="workers-list"><div class="loader"><div class="spinner"></div>Loading...</div></div>
+    </div>
+  </div>
+  <div class="fab-bar" id="dash-fab">
+    <button class="btn btn-outline" id="fab-add-worker" style="display:none;" onclick="openWorkerModal()">+ Add Worker</button>
+    <button class="btn btn-primary" id="fab-create-job" onclick="showView('view-create-job')">+ Create Job</button>
+  </div>
+</div>
+
+<!-- ======== CREATE JOB ======== -->
+<div id="view-create-job" class="view">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showView('view-dashboard')">←</button>
+      <div class="topbar-title">New Job</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="field">
+      <label>CUSTOMER NAME *</label>
+      <input type="text" id="cj-name" placeholder="e.g. Ravi Kumar">
+    </div>
+    <div class="field">
+      <label>PHONE</label>
+      <input type="tel" id="cj-phone" placeholder="+91 9876543210">
+    </div>
+    <div class="field">
+      <label>ADDRESS</label>
+      <input type="text" id="cj-address" placeholder="Site address">
+    </div>
+    <div class="field">
+      <label>SITE TYPE</label>
+      <select id="cj-site-type">
+        <option value="">Select site type</option>
+        <option value="Residential">Residential</option>
+        <option value="Commercial">Commercial</option>
+        <option value="Villa">Villa</option>
+        <option value="Apartment">Apartment</option>
+        <option value="Office">Office</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>LAYOUT TYPE</label>
+      <select id="cj-layout">
+        <option value="">Select layout</option>
+        <option value="1BHK">1 BHK</option>
+        <option value="2BHK">2 BHK</option>
+        <option value="3BHK">3 BHK</option>
+        <option value="4BHK">4 BHK</option>
+        <option value="Studio">Studio</option>
+        <option value="Villa">Villa</option>
+        <option value="Office">Office</option>
+      </select>
+    </div>
+    <div class="error-msg" id="cj-error"></div>
+  </div>
+  <div class="fab-bar">
+    <button class="btn btn-outline" onclick="showView('view-dashboard')">Cancel</button>
+    <button class="btn btn-primary" id="cj-submit" onclick="createJob()">Create Job</button>
+  </div>
+</div>
+
+<!-- ======== JOB DETAIL ======== -->
+<div id="view-job-detail" class="view">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showView('view-dashboard')">←</button>
+      <div>
+        <div class="topbar-title" id="jd-title">Job</div>
+        <div class="topbar-sub" id="jd-status-sub">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="info-grid" id="jd-info"></div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchJobTab('rooms')">Rooms</div>
+      <div class="tab" onclick="switchJobTab('issues')">Issues</div>
+    </div>
+
+    <!-- ROOMS -->
+    <div id="jd-rooms-tab">
+      <div class="room-grid" id="jd-rooms-grid">
+        <div class="loader" style="grid-column:1/-1;"><div class="spinner"></div>Loading rooms...</div>
+      </div>
+    </div>
+
+    <!-- ISSUES -->
+    <div id="jd-issues-tab" style="display:none;">
+      <div class="section-head">
+        <div class="section-title">Issues</div>
+      </div>
+      <div id="jd-issues-list"></div>
+      <div class="field" style="margin-top:14px;">
+        <label>LOG NEW ISSUE</label>
+        <textarea id="issue-desc" placeholder="Describe the issue..."></textarea>
+      </div>
+      <button class="btn btn-outline" onclick="addIssue()">+ Log Issue</button>
+    </div>
+  </div>
+  <div class="fab-bar" id="jd-fab">
+    <button class="btn btn-danger" id="jd-finish-btn" onclick="finishJob()">✓ Finish Job</button>
+  </div>
+</div>
+
+<!-- ======== ROOM / TASKS ======== -->
+<div id="view-room" class="view">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" id="room-back-btn" onclick="showView('view-job-detail')">←</button>
+      <div>
+        <div class="topbar-title" id="room-title">Room</div>
+        <div class="topbar-sub" id="room-job-name">—</div>
+      </div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="stat-row" id="room-stats"></div>
+    <div class="section-head">
+      <div class="section-title">Tasks</div>
+      <button class="btn btn-green btn-sm" onclick="openAddTaskModal()">+ Task</button>
+    </div>
+    <div id="tasks-list"><div class="loader"><div class="spinner"></div>Loading tasks...</div></div>
+  </div>
+</div>
+
+<!-- ======== MODALS ======== -->
+
+<!-- Worker Modal -->
+<div class="modal-overlay" id="worker-modal">
+  <div class="modal">
+    <div class="modal-title">Add Worker</div>
+    <div class="field"><label>NAME *</label><input type="text" id="w-name" placeholder="Worker name"></div>
+    <div class="field"><label>PHONE</label><input type="tel" id="w-phone" placeholder="+91 9876543210"></div>
+    <div class="field">
+      <label>ROLE</label>
+      <select id="w-role">
+        <option value="">Select role</option>
+        <option value="Cleaner">Cleaner</option>
+        <option value="Senior Cleaner">Senior Cleaner</option>
+        <option value="Supervisor">Supervisor</option>
+        <option value="Helper">Helper</option>
+        <option value="Specialist">Specialist</option>
+      </select>
+    </div>
+    <div class="error-msg" id="w-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('worker-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addWorker()">Add Worker</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task Modal -->
+<div class="modal-overlay" id="task-modal">
+  <div class="modal">
+    <div class="modal-title">Add Task</div>
+    <div class="field"><label>TASK NAME *</label><input type="text" id="t-name" placeholder="e.g. Mop floor"></div>
+    <div class="field">
+      <label>ASSIGN WORKER</label>
+      <select id="t-worker"><option value="">Unassigned</option></select>
+    </div>
+    <div class="field">
+      <label>ESTIMATED TIME (minutes)</label>
+      <input type="number" id="t-est-time" placeholder="30" min="1">
+    </div>
+    <div class="field">
+      <label>DIFFICULTY</label>
+      <select id="t-diff">
+        <option value="">Select</option>
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </div>
+    <div class="error-msg" id="t-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('task-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addTask()">Add Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delay Reason Modal -->
+<div class="modal-overlay" id="delay-modal">
+  <div class="modal">
+    <div class="modal-title">⚠ Task Delayed</div>
+    <p style="color:var(--muted);font-size:0.82rem;margin-bottom:16px;font-family:var(--font-mono);">Actual time exceeded estimated time. Please provide a reason.</p>
+    <div class="field">
+      <label>DELAY REASON</label>
+      <textarea id="delay-reason-input" placeholder="e.g. Stubborn stains, extra area..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="submitDelay(false)">Skip</button>
+      <button class="btn btn-danger" onclick="submitDelay(true)">Save Reason</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://ssbejqolytgvjpiaxhtu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzYmVqcW9seXRndmpwaWF4aHR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzNjMzNTksImV4cCI6MjA5MDkzOTM1OX0.xPkBVZv02q1EsOGPNhax21DY0cZg0fUcihdJkCSQk2Y';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---- STATE ----
+let currentUser = null;
+let currentJob = null;
+let currentRoom = null;
+let currentTasks = [];
+let allWorkers = [];
+let delayTaskId = null;
+let currentDashTab = 'jobs';
+let currentJobTab = 'rooms';
+
+// ---- LAYOUTS ----
+const LAYOUTS = {
+  '1BHK': ['Living Room','Bedroom','Kitchen','Bathroom'],
+  '2BHK': ['Living Room','Bedroom 1','Bedroom 2','Kitchen','Bathroom 1','Bathroom 2'],
+  '3BHK': ['Living Room','Bedroom 1','Bedroom 2','Bedroom 3','Kitchen','Bathroom 1','Bathroom 2','Bathroom 3'],
+  '4BHK': ['Living Room','Bedroom 1','Bedroom 2','Bedroom 3','Bedroom 4','Kitchen','Bathroom 1','Bathroom 2','Bathroom 3','Bathroom 4'],
+  'Studio': ['Studio Room','Kitchen','Bathroom'],
+  'Villa': ['Living Room','Dining Room','Kitchen','Bedroom 1','Bedroom 2','Bedroom 3','Bathroom 1','Bathroom 2','Bathroom 3','Terrace','Garden Area'],
+  'Office': ['Reception','Conference Room','Manager Cabin','Open Work Area','Pantry','Washroom 1','Washroom 2']
+};
+
+const ROOM_ICONS = {
+  'Living Room':'🛋️','Bedroom':'🛏️','Bedroom 1':'🛏️','Bedroom 2':'🛏️','Bedroom 3':'🛏️','Bedroom 4':'🛏️',
+  'Kitchen':'🍳','Bathroom':'🚿','Bathroom 1':'🚿','Bathroom 2':'🚿','Bathroom 3':'🚿','Bathroom 4':'🚿',
+  'Studio Room':'🏠','Dining Room':'🍽️','Terrace':'🌿','Garden Area':'🌳',
+  'Reception':'🪑','Conference Room':'💼','Manager Cabin':'🖥️','Open Work Area':'📋','Pantry':'☕',
+  'Washroom 1':'🚽','Washroom 2':'🚽'
+};
+
+// ---- INIT ----
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    currentUser = session.user;
+    enterApp();
+  }
+  db.auth.onAuthStateChange((_event, session) => {
+    if (session?.user && !currentUser) {
+      currentUser = session.user;
+      enterApp();
+    }
+  });
+})();
+
+// ---- AUTH ----
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pw = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.classList.remove('show');
+  if (!email || !pw) { showError(errEl, 'Please fill all fields'); return; }
+  btn.disabled = true; btn.textContent = 'Signing in...';
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pw });
+  btn.disabled = false; btn.textContent = 'Sign In';
+  if (error) { showError(errEl, error.message); return; }
+  currentUser = data.user;
+  enterApp();
+}
+
+async function doLogout() {
+  await db.auth.signOut();
+  currentUser = null; currentJob = null; currentRoom = null;
+  showView('view-login');
+}
+
+function enterApp() {
+  document.getElementById('dash-user-email').textContent = currentUser.email;
+  showView('view-dashboard');
+  loadJobs();
+  loadWorkers();
+}
+
+// ---- VIEW ROUTER ----
+function showView(id) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function showError(el, msg) {
+  el.textContent = msg; el.classList.add('show');
+}
+
+// ---- DASHBOARD TABS ----
+function switchDashTab(tab) {
+  currentDashTab = tab;
+  document.querySelectorAll('#dash-tabs .tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'jobs') || (i === 1 && tab === 'workers'));
+  });
+  document.getElementById('dash-jobs-tab').style.display = tab === 'jobs' ? '' : 'none';
+  document.getElementById('dash-workers-tab').style.display = tab === 'workers' ? '' : 'none';
+  document.getElementById('fab-create-job').style.display = tab === 'jobs' ? '' : 'none';
+  document.getElementById('fab-add-worker').style.display = tab === 'workers' ? '' : 'none';
+}
+
+// ---- JOBS ----
+async function loadJobs() {
+  const { data: jobs, error } = await db.from('jobs')
+    .select('*').eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
+  const listEl = document.getElementById('jobs-list');
+  if (error || !jobs?.length) {
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>No jobs yet. Create your first job!</div>`;
+    document.getElementById('jobs-count').textContent = '0 jobs';
+    return;
+  }
+  document.getElementById('jobs-count').textContent = `${jobs.length} job${jobs.length !== 1 ? 's' : ''}`;
+  listEl.innerHTML = jobs.map(j => {
+    const statusClass = j.status === 'completed' ? '' : j.status === 'ongoing' ? 'yellow' : 'grey';
+    const badgeClass = j.status === 'completed' ? 'badge-green' : j.status === 'ongoing' ? 'badge-yellow' : 'badge-muted';
+    return `
+    <div class="card ${statusClass}" onclick="openJob('${j.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+        <div class="card-title">${esc(j.customer_name)}</div>
+        <span class="badge ${badgeClass}">${j.status}</span>
+      </div>
+      <div class="card-meta">${esc(j.layout_type || '—')} · ${esc(j.site_type || '—')}</div>
+      <div class="card-meta" style="margin-top:2px;">${esc(j.address || '—')}</div>
+      <div class="card-meta" style="margin-top:2px;">${fmtDate(j.created_at)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function openJob(jobId) {
+  const { data: job } = await db.from('jobs').select('*').eq('id', jobId).single();
+  currentJob = job;
+  document.getElementById('jd-title').textContent = job.customer_name;
+  document.getElementById('jd-status-sub').textContent = `${job.layout_type || ''} · ${job.status}`;
+  document.getElementById('jd-info').innerHTML = `
+    <div class="info-item"><div class="info-label">PHONE</div><div class="info-value">${esc(job.phone || '—')}</div></div>
+    <div class="info-item"><div class="info-label">SITE TYPE</div><div class="info-value">${esc(job.site_type || '—')}</div></div>
+    <div class="info-item"><div class="info-label">LAYOUT</div><div class="info-value">${esc(job.layout_type || '—')}</div></div>
+    <div class="info-item"><div class="info-label">STATUS</div><div class="info-value">${esc(job.status)}</div></div>
+    <div class="info-item" style="grid-column:1/-1;"><div class="info-label">ADDRESS</div><div class="info-value">${esc(job.address || '—')}</div></div>
+  `;
+  const finBtn = document.getElementById('jd-finish-btn');
+  finBtn.style.display = job.status === 'completed' ? 'none' : '';
+
+  // reset to rooms tab
+  switchJobTab('rooms');
+  showView('view-job-detail');
+  loadRooms(jobId);
+  loadIssues(jobId);
+}
+
+// ---- JOB TABS ----
+function switchJobTab(tab) {
+  currentJobTab = tab;
+  document.querySelectorAll('#view-job-detail .tabs .tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'rooms') || (i === 1 && tab === 'issues'));
+  });
+  document.getElementById('jd-rooms-tab').style.display = tab === 'rooms' ? '' : 'none';
+  document.getElementById('jd-issues-tab').style.display = tab === 'issues' ? '' : 'none';
+}
+
+// ---- CREATE JOB ----
+async function createJob() {
+  const name = document.getElementById('cj-name').value.trim();
+  const phone = document.getElementById('cj-phone').value.trim();
+  const address = document.getElementById('cj-address').value.trim();
+  const siteType = document.getElementById('cj-site-type').value;
+  const layout = document.getElementById('cj-layout').value;
+  const errEl = document.getElementById('cj-error');
+  errEl.classList.remove('show');
+  if (!name) { showError(errEl, 'Customer name is required'); return; }
+  const btn = document.getElementById('cj-submit');
+  btn.disabled = true; btn.textContent = 'Creating...';
+  const { data: job, error } = await db.from('jobs').insert({
+    user_id: currentUser.id, customer_name: name, phone, address,
+    site_type: siteType, layout_type: layout, status: 'ongoing'
+  }).select().single();
+  if (error) { showError(errEl, error.message); btn.disabled = false; btn.textContent = 'Create Job'; return; }
+
+  // auto-create rooms
+  if (layout && LAYOUTS[layout]) {
+    const roomRows = LAYOUTS[layout].map(rn => ({ job_id: job.id, room_name: rn }));
+    await db.from('rooms').insert(roomRows);
+  }
+  btn.disabled = false; btn.textContent = 'Create Job';
+  // clear form
+  ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('cj-site-type').value = '';
+  document.getElementById('cj-layout').value = '';
+  showView('view-dashboard');
+  loadJobs();
+}
+
+// ---- ROOMS ----
+async function loadRooms(jobId) {
+  document.getElementById('jd-rooms-grid').innerHTML = `<div class="loader" style="grid-column:1/-1;"><div class="spinner"></div>Loading rooms...</div>`;
+  const { data: rooms } = await db.from('rooms').select('*').eq('job_id', jobId).order('created_at');
+  if (!rooms?.length) {
+    document.getElementById('jd-rooms-grid').innerHTML = `<div class="empty" style="grid-column:1/-1;"><div class="empty-icon">🚪</div>No rooms found</div>`;
+    return;
+  }
+  // Get task counts per room
+  const roomIds = rooms.map(r => r.id);
+  const { data: tasks } = await db.from('tasks').select('id,room_id,status').in('room_id', roomIds);
+  const taskMap = {};
+  (tasks || []).forEach(t => {
+    if (!taskMap[t.room_id]) taskMap[t.room_id] = { total: 0, done: 0 };
+    taskMap[t.room_id].total++;
+    if (t.status === 'completed') taskMap[t.room_id].done++;
+  });
+  document.getElementById('jd-rooms-grid').innerHTML = rooms.map(r => {
+    const tm = taskMap[r.id] || { total: 0, done: 0 };
+    const icon = ROOM_ICONS[r.room_name] || '🚪';
+    const allDone = tm.total > 0 && tm.done === tm.total;
+    return `
+    <div class="room-card ${allDone ? 'border-green' : ''}" onclick="openRoom('${r.id}', '${esc(r.room_name)}')">
+      <div class="room-icon">${icon}</div>
+      <div class="room-name">${esc(r.room_name)}</div>
+      <div class="room-tasks">${tm.done}/${tm.total} tasks done</div>
+      ${allDone ? '<span class="badge badge-green" style="margin-top:6px;font-size:0.6rem;">DONE</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
+// ---- OPEN ROOM ----
+async function openRoom(roomId, roomName) {
+  currentRoom = { id: roomId, name: roomName };
+  document.getElementById('room-title').textContent = roomName;
+  document.getElementById('room-job-name').textContent = currentJob.customer_name;
+  showView('view-room');
+  loadTasks(roomId);
+}
+
+// ---- TASKS ----
+async function loadTasks(roomId) {
+  document.getElementById('tasks-list').innerHTML = `<div class="loader"><div class="spinner"></div>Loading tasks...</div>`;
+  const { data: tasks } = await db.from('tasks')
+    .select('*, workers(name, role)').eq('room_id', roomId).order('status');
+  currentTasks = tasks || [];
+  renderTasks();
+  renderRoomStats();
+}
+
+function renderRoomStats() {
+  const total = currentTasks.length;
+  const done = currentTasks.filter(t => t.status === 'completed').length;
+  const inProg = currentTasks.filter(t => t.status === 'in_progress').length;
+  const delayed = currentTasks.filter(t => t.status === 'delayed').length;
+  document.getElementById('room-stats').innerHTML = `
+    <div class="stat-box"><div class="stat-num" style="color:var(--accent)">${done}</div><div class="stat-label">DONE</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--yellow)">${inProg}</div><div class="stat-label">IN PROGRESS</div></div>
+    <div class="stat-box"><div class="stat-num" style="color:var(--red)">${delayed}</div><div class="stat-label">DELAYED</div></div>
+  `;
+}
+
+function renderTasks() {
+  const listEl = document.getElementById('tasks-list');
+  if (!currentTasks.length) {
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">✅</div>No tasks yet. Add one!</div>`;
+    return;
+  }
+  listEl.innerHTML = currentTasks.map(t => taskCard(t)).join('');
+}
+
+function taskCard(t) {
+  const statusBadge = {
+    'not_started': '<span class="badge badge-muted">NOT STARTED</span>',
+    'in_progress': '<span class="badge badge-yellow">IN PROGRESS</span>',
+    'completed': '<span class="badge badge-green">COMPLETED</span>',
+    'delayed': '<span class="badge badge-red">DELAYED</span>',
+  }[t.status] || '<span class="badge badge-muted">UNKNOWN</span>';
+
+  const workerName = t.workers?.name ? `👤 ${t.workers.name} (${t.workers.role || '—'})` : '👤 Unassigned';
+  const estTime = t.estimated_time ? `⏱ Est: ${t.estimated_time}m` : '';
+  const actTime = t.actual_time ? `⏱ Actual: ${t.actual_time}m` : '';
+
+  let actions = '';
+  if (t.status === 'not_started') {
+    actions = `<button class="btn btn-yellow btn-sm" onclick="startTask('${t.id}')">▶ Start</button>`;
+  } else if (t.status === 'in_progress') {
+    actions = `<button class="btn btn-green btn-sm" onclick="completeTask('${t.id}')">✓ Complete</button>`;
+  }
+  const delayBlock = (t.status === 'delayed' && t.delay_reason) ?
+    `<div class="delay-form"><div class="info-label" style="font-size:0.62rem;color:var(--red);font-family:var(--font-mono);">DELAY REASON</div><div style="font-size:0.8rem;color:var(--muted);margin-top:3px;">${esc(t.delay_reason)}</div></div>` : '';
+
+  return `
+  <div class="task-card">
+    <div class="task-top">
+      <div>
+        <div class="task-name">${esc(t.task_name)}</div>
+        <div class="task-worker">${workerName}</div>
+      </div>
+      ${statusBadge}
+    </div>
+    <div class="task-meta">
+      ${estTime ? `<span class="badge badge-muted">${estTime}</span>` : ''}
+      ${actTime ? `<span class="badge badge-blue">${actTime}</span>` : ''}
+      ${t.difficulty ? `<span class="badge badge-muted">${t.difficulty}</span>` : ''}
+    </div>
+    ${delayBlock}
+    <div class="task-actions">${actions}</div>
+  </div>`;
+}
+
+async function startTask(taskId) {
+  await db.from('tasks').update({ status: 'in_progress', started_at: new Date().toISOString() }).eq('id', taskId);
+  await loadTasks(currentRoom.id);
+}
+
+async function completeTask(taskId) {
+  const task = currentTasks.find(t => t.id === taskId);
+  const now = new Date();
+  const startedAt = task.started_at ? new Date(task.started_at) : now;
+  const actualMinutes = Math.round((now - startedAt) / 60000) || 1;
+  const isDelayed = task.estimated_time && actualMinutes > task.estimated_time;
+
+  await db.from('tasks').update({
+    status: isDelayed ? 'delayed' : 'completed',
+    completed_at: now.toISOString(),
+    actual_time: actualMinutes
+  }).eq('id', taskId);
+
+  if (isDelayed) {
+    delayTaskId = taskId;
+    openModal('delay-modal');
+  } else {
+    await loadTasks(currentRoom.id);
+  }
+}
+
+async function submitDelay(withReason) {
+  if (withReason && delayTaskId) {
+    const reason = document.getElementById('delay-reason-input').value.trim();
+    await db.from('tasks').update({ delay_reason: reason }).eq('id', delayTaskId);
+  }
+  document.getElementById('delay-reason-input').value = '';
+  delayTaskId = null;
+  closeModal('delay-modal');
+  await loadTasks(currentRoom.id);
+}
+
+// ---- ADD TASK MODAL ----
+async function openAddTaskModal() {
+  // Populate worker dropdown
+  const sel = document.getElementById('t-worker');
+  sel.innerHTML = '<option value="">Unassigned</option>' +
+    allWorkers.map(w => `<option value="${w.id}">${esc(w.name)} (${esc(w.role || '—')})</option>`).join('');
+  ['t-name','t-est-time'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('t-diff').value = '';
+  document.getElementById('t-error').classList.remove('show');
+  openModal('task-modal');
+}
+
+async function addTask() {
+  const name = document.getElementById('t-name').value.trim();
+  const workerId = document.getElementById('t-worker').value || null;
+  const estTime = parseInt(document.getElementById('t-est-time').value) || null;
+  const diff = document.getElementById('t-diff').value || null;
+  const errEl = document.getElementById('t-error');
+  if (!name) { showError(errEl, 'Task name is required'); return; }
+  await db.from('tasks').insert({
+    room_id: currentRoom.id, task_name: name,
+    assigned_worker_id: workerId, estimated_time: estTime,
+    difficulty: diff, status: 'not_started'
+  });
+  closeModal('task-modal');
+  await loadTasks(currentRoom.id);
+}
+
+// ---- WORKERS ----
+async function loadWorkers() {
+  const { data: workers } = await db.from('workers')
+    .select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  allWorkers = workers || [];
+  const listEl = document.getElementById('workers-list');
+  document.getElementById('workers-count').textContent = `${allWorkers.length} worker${allWorkers.length !== 1 ? 's' : ''}`;
+  if (!allWorkers.length) {
+    listEl.innerHTML = `<div class="empty"><div class="empty-icon">👷</div>No workers yet. Add your team!</div>`;
+    return;
+  }
+  listEl.innerHTML = allWorkers.map(w => `
+    <div class="worker-card">
+      <div class="worker-avatar">${w.name.charAt(0).toUpperCase()}</div>
+      <div class="worker-info">
+        <div class="worker-name">${esc(w.name)}</div>
+        <div class="worker-role">${esc(w.role || '—')} · ${esc(w.phone || '—')}</div>
+      </div>
+      <span class="badge badge-muted">${esc(w.role || 'Staff')}</span>
+    </div>`).join('');
+}
+
+function openWorkerModal() {
+  ['w-name','w-phone'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('w-role').value = '';
+  document.getElementById('w-error').classList.remove('show');
+  openModal('worker-modal');
+}
+
+async function addWorker() {
+  const name = document.getElementById('w-name').value.trim();
+  const phone = document.getElementById('w-phone').value.trim();
+  const role = document.getElementById('w-role').value;
+  const errEl = document.getElementById('w-error');
+  if (!name) { showError(errEl, 'Worker name is required'); return; }
+  const { error } = await db.from('workers').insert({
+    user_id: currentUser.id, name, phone, role
+  });
+  if (error) { showError(errEl, error.message); return; }
+  closeModal('worker-modal');
+  await loadWorkers();
+}
+
+// ---- ISSUES ----
+async function loadIssues(jobId) {
+  const { data: issues } = await db.from('issues')
+    .select('*').eq('job_id', jobId).order('created_at', { ascending: false });
+  const listEl = document.getElementById('jd-issues-list');
+  if (!issues?.length) {
+    listEl.innerHTML = `<div class="empty" style="padding:20px 0;"><div class="empty-icon" style="font-size:1.5rem;">⚠️</div>No issues logged</div>`;
+    return;
+  }
+  listEl.innerHTML = issues.map(i => `
+    <div class="issue-card">
+      <div class="issue-desc">${esc(i.description || '—')}</div>
+      <div class="issue-time">${fmtDate(i.created_at)}</div>
+    </div>`).join('');
+}
+
+async function addIssue() {
+  const desc = document.getElementById('issue-desc').value.trim();
+  if (!desc || !currentJob) return;
+  await db.from('issues').insert({ job_id: currentJob.id, description: desc });
+  document.getElementById('issue-desc').value = '';
+  await loadIssues(currentJob.id);
+}
+
+// ---- FINISH JOB ----
+async function finishJob() {
+  if (!currentJob) return;
+  if (!confirm(`Mark job for "${currentJob.customer_name}" as completed?`)) return;
+  await db.from('jobs').update({ status: 'completed', site_out_time: new Date().toISOString() }).eq('id', currentJob.id);
+  await db.from('customer_verifications').insert({ job_id: currentJob.id, verified: true, verified_at: new Date().toISOString() });
+  currentJob.status = 'completed';
+  document.getElementById('jd-status-sub').textContent = `${currentJob.layout_type || ''} · completed`;
+  document.getElementById('jd-finish-btn').style.display = 'none';
+  alert('✅ Job marked as completed! Customer verification saved.');
+  showView('view-dashboard');
+  await loadJobs();
+}
+
+// ---- MODAL HELPERS ----
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ---- UTILS ----
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+</script>
+</body>
+</html>
