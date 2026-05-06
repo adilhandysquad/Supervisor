@@ -323,6 +323,8 @@
   }
   .kitchen-note.show { display: block; }
 
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
   /* DESKTOP */
   @media (min-width: 768px) {
     .content { padding: 22px 28px; }
@@ -448,23 +450,9 @@
     </div>
     <div class="kitchen-note" id="kitchen-note">🍳 Extra kitchens will be added as Kitchen 2, Kitchen 3, etc.</div>
     <hr>
-    <!-- Time tracking section -->
-    <div style="margin-bottom:10px;">
-      <div style="font-size:0.72rem;font-weight:700;color:var(--muted);font-family:var(--font-mono);letter-spacing:0.06em;margin-bottom:10px;">⏱ TIME TRACKING</div>
-      <div class="form-row">
-        <div class="field">
-          <label>SITE ARRIVAL TIME</label>
-          <input type="time" id="cj-site-in" />
-        </div>
-        <div class="field">
-          <label>WORK STARTED TIME</label>
-          <input type="time" id="cj-work-start" />
-        </div>
-      </div>
-      <div class="field" style="max-width:50%;">
-        <label>WORK ENDED TIME</label>
-        <input type="time" id="cj-work-end" />
-      </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;">
+      <div style="font-size:0.7rem;font-weight:700;color:var(--muted);font-family:var(--font-mono);letter-spacing:0.06em;margin-bottom:6px;">⏱ TIME TRACKING</div>
+      <div style="font-size:0.78rem;color:var(--muted);font-family:var(--font-mono);line-height:1.6;">Times are recorded live on-site using the action buttons inside the job. No manual entry needed.</div>
     </div>
     <div class="error-msg" id="cj-error"></div>
   </div>
@@ -486,6 +474,10 @@
     </div>
   </div>
   <div class="content">
+    <!-- STATUS ACTION BAR -->
+    <div id="jd-action-bar" style="margin-bottom:14px;"></div>
+    <!-- TIMELINE -->
+    <div id="jd-timeline" style="margin-bottom:14px;display:none;"></div>
     <div class="info-grid" id="jd-info"></div>
     <div class="tabs">
       <div class="tab active" onclick="switchJobTab('rooms')">🚪 Rooms</div>
@@ -510,7 +502,7 @@
   </div>
   <div class="fab-bar">
     <button class="btn btn-blue btn-sm" style="flex:0 0 auto;" onclick="downloadJobReport()">⬇ PDF Report</button>
-    <button class="btn btn-danger" id="jd-finish-btn" onclick="finishJob()">✓ Finish Job</button>
+    <div id="jd-fab-action" style="flex:1;"></div>
   </div>
 </div>
 
@@ -633,6 +625,46 @@
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal('add-room-modal')">Cancel</button>
       <button class="btn btn-purple" onclick="addExtraRoom()">+ Add Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pre-departure Checklist Modal -->
+<div class="modal-overlay" id="checklist-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚐 Pre-Departure Checklist</div>
+    <p style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);margin-bottom:16px;">All items must be confirmed before marking the team as In Transit.</p>
+    <div id="checklist-items" style="margin-bottom:14px;"></div>
+    <div class="error-msg" id="checklist-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('checklist-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmChecklist()">✓ All Clear — Depart</button>
+    </div>
+  </div>
+</div>
+
+<!-- Customer Sign-off Modal -->
+<div class="modal-overlay" id="signoff-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">✅ Customer Sign-Off</div>
+    <p style="font-family:var(--font-mono);font-size:0.7rem;color:var(--muted);margin-bottom:16px;">Hand the device to the customer. They confirm the work is done to their satisfaction.</p>
+    <div class="field">
+      <label>CUSTOMER RATING (1–5 stars)</label>
+      <div id="star-rating" style="display:flex;gap:10px;margin-bottom:4px;">
+        <span class="star-btn" data-val="1" onclick="setStarRating(1)" style="font-size:1.8rem;cursor:pointer;opacity:0.35;">★</span>
+        <span class="star-btn" data-val="2" onclick="setStarRating(2)" style="font-size:1.8rem;cursor:pointer;opacity:0.35;">★</span>
+        <span class="star-btn" data-val="3" onclick="setStarRating(3)" style="font-size:1.8rem;cursor:pointer;opacity:0.35;">★</span>
+        <span class="star-btn" data-val="4" onclick="setStarRating(4)" style="font-size:1.8rem;cursor:pointer;opacity:0.35;">★</span>
+        <span class="star-btn" data-val="5" onclick="setStarRating(5)" style="font-size:1.8rem;cursor:pointer;opacity:0.35;">★</span>
+      </div>
+    </div>
+    <div class="field"><label>FEEDBACK (optional)</label><textarea id="signoff-feedback" placeholder="Any comments from the customer..."></textarea></div>
+    <div class="error-msg" id="signoff-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal('signoff-modal')">Cancel</button>
+      <button class="btn btn-green" onclick="submitSignoff()">✓ Customer Confirms</button>
     </div>
   </div>
 </div>
@@ -830,13 +862,18 @@ async function loadJobs() {
   }
   document.getElementById('jobs-count').textContent = `${jobs.length} job${jobs.length!==1?'s':''}`;
   listEl.innerHTML = jobs.map(j => {
-    const cls = j.status==='completed'?'green':j.status==='ongoing'?'yellow':'grey';
-    const b = j.status==='completed'?'badge-green':j.status==='ongoing'?'badge-yellow':'badge-muted';
+    const statusMap = {
+      ongoing: { cls:'', b:'badge-blue', lbl:'CONFIRMED' },
+      in_transit: { cls:'yellow', b:'badge-yellow', lbl:'IN TRANSIT' },
+      in_progress: { cls:'yellow', b:'badge-purple', lbl:'IN PROGRESS' },
+      completed: { cls:'green', b:'badge-green', lbl:'COMPLETED' },
+    };
+    const sm = statusMap[j.status] || { cls:'grey', b:'badge-muted', lbl:j.status };
     return `
-    <div class="card ${cls}" onclick="openJob('${j.id}')">
+    <div class="card ${sm.cls}" onclick="openJob('${j.id}')">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:5px;">
         <div class="card-title">${esc(j.customer_name)}</div>
-        <span class="badge ${b}" style="flex-shrink:0;">${j.status}</span>
+        <span class="badge ${sm.b}" style="flex-shrink:0;">${sm.lbl}</span>
       </div>
       <div class="card-meta">${esc(j.layout_type||'—')} &nbsp;·&nbsp; ${esc(j.site_type||'—')}</div>
       <div class="card-meta">${esc(j.address||'—')}</div>
@@ -849,15 +886,16 @@ async function openJob(jobId) {
   const { data: job } = await db.from('jobs').select('*').eq('id', jobId).single();
   currentJob = job;
   document.getElementById('jd-title').textContent = job.customer_name;
-  document.getElementById('jd-status-sub').textContent = `${job.layout_type||''} · ${job.status}`;
+  document.getElementById('jd-status-sub').textContent = `${job.layout_type||''} · ${job.status.replace(/_/g,' ').toUpperCase()}`;
   document.getElementById('jd-info').innerHTML = `
     <div class="info-item"><div class="info-label">PHONE</div><div class="info-value">${esc(job.phone||'—')}</div></div>
     <div class="info-item"><div class="info-label">SITE TYPE</div><div class="info-value">${esc(job.site_type||'—')}</div></div>
     <div class="info-item"><div class="info-label">LAYOUT</div><div class="info-value">${esc(job.layout_type||'—')}</div></div>
-    <div class="info-item"><div class="info-label">STATUS</div><div class="info-value">${esc(job.status)}</div></div>
+    <div class="info-item"><div class="info-label">CREATED</div><div class="info-value">${fmtDate(job.created_at)}</div></div>
     <div class="info-item" style="grid-column:1/-1;"><div class="info-label">ADDRESS</div><div class="info-value">${esc(job.address||'—')}</div></div>
   `;
-  document.getElementById('jd-finish-btn').style.display = job.status==='completed' ? 'none' : '';
+  renderJobActionBar(job);
+  renderJobTimeline(job);
   switchJobTab('rooms');
   navigate('view-job-detail');
   loadRooms(jobId);
@@ -896,24 +934,11 @@ async function createJob() {
   const errEl = document.getElementById('cj-error'); clearErr(errEl);
   if (!name) { showErr(errEl, 'Customer name is required'); return; }
 
-  // Build datetime strings from today + chosen time
-  function buildDT(timeVal) {
-    if (!timeVal) return null;
-    const today = new Date().toISOString().slice(0,10);
-    return new Date(`${today}T${timeVal}:00`).toISOString();
-  }
-  const siteInTime   = buildDT(document.getElementById('cj-site-in').value);
-  const workStart    = buildDT(document.getElementById('cj-work-start').value);
-  const workEnd      = buildDT(document.getElementById('cj-work-end').value);
-
   const btn = document.getElementById('cj-submit');
   btn.disabled = true; btn.textContent = 'Creating...';
   const { data: job, error } = await db.from('jobs').insert({
     user_id: currentUser.id, customer_name: name, phone, address,
     site_type: siteType, layout_type: layout, status: 'ongoing',
-    site_in_time:   siteInTime,
-    work_start_time: workStart,
-    site_out_time:  workEnd,
   }).select().single();
   if (error) { showErr(errEl, error.message); btn.disabled=false; btn.textContent='Create Job →'; return; }
 
@@ -926,7 +951,7 @@ async function createJob() {
   }
 
   btn.disabled=false; btn.textContent='Create Job →';
-  ['cj-name','cj-phone','cj-address','cj-site-in','cj-work-start','cj-work-end'].forEach(id => document.getElementById(id).value='');
+  ['cj-name','cj-phone','cj-address'].forEach(id => document.getElementById(id).value='');
   document.getElementById('cj-site-type').value='';
   document.getElementById('cj-layout').value='';
   document.getElementById('cj-kitchens').value='1';
@@ -1222,22 +1247,215 @@ async function addIssue() {
   await loadIssues(currentJob.id);
 }
 
-// FINISH JOB
-async function finishJob() {
-  if (!currentJob) return;
-  if (!confirm(`Mark job for "${currentJob.customer_name}" as completed?`)) return;
-  await db.from('jobs').update({ status:'completed', site_out_time:new Date().toISOString() }).eq('id', currentJob.id);
-  await db.from('customer_verifications').insert({ job_id:currentJob.id, verified:true, verified_at:new Date().toISOString() });
-  currentJob.status='completed';
-  document.getElementById('jd-finish-btn').style.display='none';
-  toast('✅ Job completed & verified!','var(--green)');
+// =============================================
+// STATUS LIFECYCLE — spec-aligned
+// ongoing → in_transit → in_progress → completed
+// =============================================
+
+// STATUS LABELS & COLORS
+const STATUS_CONFIG = {
+  ongoing:     { label:'CONFIRMED',   color:'var(--accent)',  badge:'badge-blue' },
+  in_transit:  { label:'IN TRANSIT',  color:'var(--yellow)',  badge:'badge-yellow' },
+  in_progress: { label:'IN PROGRESS', color:'var(--purple)',  badge:'badge-purple' },
+  completed:   { label:'COMPLETED',   color:'var(--green)',   badge:'badge-green' },
+};
+
+function renderJobActionBar(job) {
+  const bar = document.getElementById('jd-action-bar');
+  const fab = document.getElementById('jd-fab-action');
+  const s = job.status;
+
+  // Status badge strip
+  let statusHtml = `
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;">
+      <div style="width:9px;height:9px;border-radius:50%;background:${STATUS_CONFIG[s]?.color||'var(--muted)'};flex-shrink:0;${s==='in_transit'||s==='in_progress'?'box-shadow:0 0 0 3px rgba(245,158,11,0.25);animation:pulse 1.4s ease infinite;':''}"></div>
+      <span style="font-family:var(--font-mono);font-size:0.7rem;font-weight:700;letter-spacing:0.06em;color:${STATUS_CONFIG[s]?.color||'var(--muted)'};">${STATUS_CONFIG[s]?.label||s.toUpperCase()}</span>
+    </div>`;
+
+  bar.innerHTML = statusHtml;
+
+  // FAB action button based on status
+  if (s === 'ongoing') {
+    fab.innerHTML = `<button class="btn btn-yellow" onclick="openChecklistModal()">🚐 Mark In Transit</button>`;
+  } else if (s === 'in_transit') {
+    fab.innerHTML = `<button class="btn btn-purple" onclick="markArrived()">📍 Arrived — Start Work</button>`;
+  } else if (s === 'in_progress') {
+    fab.innerHTML = `<button class="btn btn-green" onclick="openSignoffModal()">✓ Complete Job</button>`;
+  } else {
+    fab.innerHTML = '';
+  }
+}
+
+function renderJobTimeline(job) {
+  const tl = document.getElementById('jd-timeline');
+  const hasAny = job.site_in_time || job.work_start_time || job.site_out_time;
+  if (!hasAny) { tl.style.display='none'; return; }
+  tl.style.display = '';
+
+  const siteIn  = job.site_in_time  ? new Date(job.site_in_time)  : null;
+  const workSt  = job.work_start_time ? new Date(job.work_start_time) : null;
+  const siteOut = job.site_out_time  ? new Date(job.site_out_time)  : null;
+
+  let travelMins = null, workMins = null, totalMins = null;
+  if (siteIn && workSt)  travelMins = Math.round((workSt - siteIn) / 60000);
+  if (workSt && siteOut) workMins   = Math.round((siteOut - workSt) / 60000);
+  if (siteIn && siteOut) totalMins  = Math.round((siteOut - siteIn) / 60000);
+
+  function fmtDur(mins) {
+    if (mins === null || mins < 0) return '—';
+    if (mins < 60) return `${mins}m`;
+    return `${Math.floor(mins/60)}h ${mins%60}m`;
+  }
+
+  tl.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;">
+      <div style="font-family:var(--font-mono);font-size:0.63rem;color:var(--muted);letter-spacing:0.06em;margin-bottom:11px;font-weight:700;">⏱ TIME LOG</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.58rem;color:var(--muted);margin-bottom:3px;">ARRIVED</div>
+          <div style="font-weight:700;font-size:0.82rem;color:${siteIn?'var(--text)':'var(--muted)'};">${siteIn?fmtTime(job.site_in_time):'—'}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.58rem;color:var(--muted);margin-bottom:3px;">STARTED</div>
+          <div style="font-weight:700;font-size:0.82rem;color:${workSt?'var(--text)':'var(--muted)'};">${workSt?fmtTime(job.work_start_time):'—'}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.58rem;color:var(--muted);margin-bottom:3px;">FINISHED</div>
+          <div style="font-weight:700;font-size:0.82rem;color:${siteOut?'var(--green)':'var(--muted)'};">${siteOut?fmtTime(job.site_out_time):'—'}</div>
+        </div>
+      </div>
+      ${(travelMins!==null||workMins!==null||totalMins!==null) ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--muted);margin-bottom:2px;">SETUP TIME</div>
+          <div style="font-family:var(--font-mono);font-size:0.8rem;font-weight:700;color:var(--accent);">${fmtDur(travelMins)}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--muted);margin-bottom:2px;">WORK TIME</div>
+          <div style="font-family:var(--font-mono);font-size:0.8rem;font-weight:700;color:var(--purple);">${fmtDur(workMins)}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:0.55rem;color:var(--muted);margin-bottom:2px;">TOTAL</div>
+          <div style="font-family:var(--font-mono);font-size:0.8rem;font-weight:700;color:var(--green);">${fmtDur(totalMins)}</div>
+        </div>
+      </div>` : ''}
+    </div>`;
+}
+
+// CHECKLIST
+const CHECKLIST_ITEMS = [
+  'All assigned crew members confirmed present',
+  'All required materials loaded onto vehicle',
+  'Vehicle confirmed ready and fuelled',
+  'Job brief reviewed — customer location noted',
+  'Special instructions from Scheduling noted',
+];
+let checklistState = {};
+
+function openChecklistModal() {
+  checklistState = {};
+  const itemsEl = document.getElementById('checklist-items');
+  itemsEl.innerHTML = CHECKLIST_ITEMS.map((item, i) => `
+    <div onclick="toggleChecklist(${i})" id="cl-item-${i}" style="display:flex;align-items:center;gap:12px;padding:11px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;transition:all .15s;">
+      <div id="cl-check-${i}" style="width:20px;height:20px;border:2px solid var(--border);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;"></div>
+      <span style="font-size:0.82rem;line-height:1.4;">${item}</span>
+    </div>`).join('');
+  document.getElementById('checklist-error').classList.remove('show');
+  openModal('checklist-modal');
+}
+
+function toggleChecklist(i) {
+  checklistState[i] = !checklistState[i];
+  const box = document.getElementById(`cl-check-${i}`);
+  const row = document.getElementById(`cl-item-${i}`);
+  if (checklistState[i]) {
+    box.innerHTML = '✓';
+    box.style.cssText = 'width:20px;height:20px;border:2px solid var(--green);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--green-dim);color:var(--green);font-size:0.75rem;font-weight:700;transition:all .15s;';
+    row.style.borderColor = 'var(--green)';
+  } else {
+    box.innerHTML = '';
+    box.style.cssText = 'width:20px;height:20px;border:2px solid var(--border);border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s;';
+    row.style.borderColor = 'var(--border)';
+  }
+}
+
+async function confirmChecklist() {
+  const allChecked = CHECKLIST_ITEMS.every((_, i) => checklistState[i]);
+  if (!allChecked) {
+    document.getElementById('checklist-error').textContent = 'All checklist items must be confirmed before departing.';
+    document.getElementById('checklist-error').classList.add('show');
+    return;
+  }
+  closeModal('checklist-modal');
+  await db.from('jobs').update({ status:'in_transit', site_in_time: new Date().toISOString() }).eq('id', currentJob.id);
+  const { data: updated } = await db.from('jobs').select('*').eq('id', currentJob.id).single();
+  currentJob = updated;
+  document.getElementById('jd-status-sub').textContent = `${currentJob.layout_type||''} · IN TRANSIT`;
+  renderJobActionBar(currentJob);
+  renderJobTimeline(currentJob);
+  toast('🚐 In Transit — drive safe!', 'var(--yellow)');
+}
+
+async function markArrived() {
+  const now = new Date().toISOString();
+  await db.from('jobs').update({ status:'in_progress', work_start_time: now }).eq('id', currentJob.id);
+  const { data: updated } = await db.from('jobs').select('*').eq('id', currentJob.id).single();
+  currentJob = updated;
+  document.getElementById('jd-status-sub').textContent = `${currentJob.layout_type||''} · IN PROGRESS`;
+  renderJobActionBar(currentJob);
+  renderJobTimeline(currentJob);
+  toast('📍 Arrived — work started!', 'var(--purple)');
+}
+
+// SIGN-OFF
+let customerRating = 0;
+
+function openSignoffModal() {
+  customerRating = 0;
+  setStarRating(0);
+  document.getElementById('signoff-feedback').value = '';
+  document.getElementById('signoff-error').classList.remove('show');
+  openModal('signoff-modal');
+}
+
+function setStarRating(val) {
+  customerRating = val;
+  document.querySelectorAll('.star-btn').forEach(s => {
+    const v = parseInt(s.dataset.val);
+    s.style.opacity = v <= val ? '1' : '0.25';
+    s.style.color = v <= val ? 'var(--yellow)' : 'var(--muted)';
+  });
+}
+
+async function submitSignoff() {
+  if (!customerRating) {
+    document.getElementById('signoff-error').textContent = 'Please select a star rating from the customer.';
+    document.getElementById('signoff-error').classList.add('show');
+    return;
+  }
+  const feedback = document.getElementById('signoff-feedback').value.trim();
+  const now = new Date().toISOString();
+  await db.from('jobs').update({
+    status: 'completed',
+    site_out_time: now,
+  }).eq('id', currentJob.id);
+  await db.from('customer_verifications').insert({
+    job_id: currentJob.id, verified: true, verified_at: now,
+  });
+  closeModal('signoff-modal');
+  const { data: updated } = await db.from('jobs').select('*').eq('id', currentJob.id).single();
+  currentJob = updated;
+  document.getElementById('jd-status-sub').textContent = `${currentJob.layout_type||''} · COMPLETED`;
+  renderJobActionBar(currentJob);
+  renderJobTimeline(currentJob);
+  toast(`✅ Job completed! Customer rated ${customerRating}★`, 'var(--green)');
   setTimeout(() => {
     navStack = ['view-dashboard'];
     history.replaceState({ view:'view-dashboard' },'','#view-dashboard');
     _showView('view-dashboard');
     window.scrollTo(0, 0);
     loadJobs();
-  }, 1200);
+  }, 1500);
 }
 
 // MODALS
